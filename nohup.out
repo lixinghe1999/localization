@@ -1,0 +1,42 @@
+  0%|          | 0/2880 [00:00<?, ?it/s]  0%|          | 0/2880 [00:02<?, ?it/s]
+Traceback (most recent call last):
+  File "/home/lixing/egoaudio/localization/train.py", line 64, in <module>
+    train(model, train_loader, test_loader, optimizer, num_epochs=10)
+  File "/home/lixing/egoaudio/localization/train.py", line 14, in train
+    for i, (inputs, labels) in enumerate(pbar):
+  File "/home/lixing/miniconda3/envs/egoaudio/lib/python3.9/site-packages/tqdm/std.py", line 1181, in __iter__
+    for obj in iterable:
+  File "/home/lixing/miniconda3/envs/egoaudio/lib/python3.9/site-packages/torch/utils/data/dataloader.py", line 628, in __next__
+    data = self._next_data()
+  File "/home/lixing/miniconda3/envs/egoaudio/lib/python3.9/site-packages/torch/utils/data/dataloader.py", line 1333, in _next_data
+    return self._process_data(data)
+  File "/home/lixing/miniconda3/envs/egoaudio/lib/python3.9/site-packages/torch/utils/data/dataloader.py", line 1359, in _process_data
+    data.reraise()
+  File "/home/lixing/miniconda3/envs/egoaudio/lib/python3.9/site-packages/torch/_utils.py", line 543, in reraise
+    raise exception
+RuntimeError: Caught RuntimeError in DataLoader worker process 0.
+Original Traceback (most recent call last):
+  File "/home/lixing/miniconda3/envs/egoaudio/lib/python3.9/site-packages/torch/utils/data/_utils/worker.py", line 302, in _worker_loop
+    data = fetcher.fetch(index)
+  File "/home/lixing/miniconda3/envs/egoaudio/lib/python3.9/site-packages/torch/utils/data/_utils/fetch.py", line 61, in fetch
+    return self.collate_fn(data)
+  File "/home/lixing/miniconda3/envs/egoaudio/lib/python3.9/site-packages/torch/utils/data/_utils/collate.py", line 265, in default_collate
+    return collate(batch, collate_fn_map=default_collate_fn_map)
+  File "/home/lixing/miniconda3/envs/egoaudio/lib/python3.9/site-packages/torch/utils/data/_utils/collate.py", line 143, in collate
+    return [collate(samples, collate_fn_map=collate_fn_map) for samples in transposed]  # Backwards compatibility.
+  File "/home/lixing/miniconda3/envs/egoaudio/lib/python3.9/site-packages/torch/utils/data/_utils/collate.py", line 143, in <listcomp>
+    return [collate(samples, collate_fn_map=collate_fn_map) for samples in transposed]  # Backwards compatibility.
+  File "/home/lixing/miniconda3/envs/egoaudio/lib/python3.9/site-packages/torch/utils/data/_utils/collate.py", line 128, in collate
+    return elem_type({key: collate([d[key] for d in batch], collate_fn_map=collate_fn_map) for key in elem})
+  File "/home/lixing/miniconda3/envs/egoaudio/lib/python3.9/site-packages/torch/utils/data/_utils/collate.py", line 128, in <dictcomp>
+    return elem_type({key: collate([d[key] for d in batch], collate_fn_map=collate_fn_map) for key in elem})
+  File "/home/lixing/miniconda3/envs/egoaudio/lib/python3.9/site-packages/torch/utils/data/_utils/collate.py", line 120, in collate
+    return collate_fn_map[elem_type](batch, collate_fn_map=collate_fn_map)
+  File "/home/lixing/miniconda3/envs/egoaudio/lib/python3.9/site-packages/torch/utils/data/_utils/collate.py", line 172, in collate_numpy_array_fn
+    return collate([torch.as_tensor(b) for b in batch], collate_fn_map=collate_fn_map)
+  File "/home/lixing/miniconda3/envs/egoaudio/lib/python3.9/site-packages/torch/utils/data/_utils/collate.py", line 120, in collate
+    return collate_fn_map[elem_type](batch, collate_fn_map=collate_fn_map)
+  File "/home/lixing/miniconda3/envs/egoaudio/lib/python3.9/site-packages/torch/utils/data/_utils/collate.py", line 162, in collate_tensor_fn
+    out = elem.new(storage).resize_(len(batch), *list(elem.size()))
+RuntimeError: Trying to resize storage that is not resizable
+
