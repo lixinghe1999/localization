@@ -1,0 +1,5 @@
+data/HRTF-Database
+data/TIMIT
+figs/
+ckpts
+*.pyc

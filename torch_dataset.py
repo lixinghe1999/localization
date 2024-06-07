@@ -3,130 +3,146 @@ import os
 import librosa
 import json
 import numpy as np
-from spafe.features import gfcc, mfcc
+from spafe.features.gfcc import gfcc
+from spafe.features.mfcc import mfcc
 
+
+# compute features
 n_fft = 1024
 num_sectors = 8
 sector_degree = 360 / 8
 num_range = 5
 sector_range = 1
 max_source = 3
-def DeepEAR(doa, ranges):
-    label = np.zeros((num_sectors, 7), dtype=np.float32)
-    for d, r in zip(doa, ranges):
-        if type(d) == list:
-            d_azimuth = d[0]
-            r_float = r[0]
-        else:
-            d_azimuth = d
-            r_float = r
-        idx = int((d_azimuth + 179) // (sector_degree))
-        res = ((d_azimuth + 179) % (sector_degree)) / sector_degree
-        label[idx, 0] = 1
-        label[idx, 1] = res
-        range_idx = int(min(4, r_float // sector_range))
-        label[idx, 2 + range_idx] = 1
-    return label
-def DeepBSL(doa, ranges):
+
+def DeepBSL(doa, ranges, config):
     label = np.zeros((max_source, 2), dtype=np.float32)
     for i, (d, r) in enumerate(zip(doa, ranges)):
-        label[i, 0] = (d[0] + 180) / 360
-        label[i, 1] = (d[1] + 180) / 360
+        label[i, 0] = (d[0] - config['classifier']['min_azimuth']) / (config['classifier']['max_azimuth']- config['classifier']['min_azimuth'])
+        label[i, 1] = (d[1] - config['classifier']['min_elevation']) / (config['classifier']['max_elevation']- config['classifier']['min_elevation'])
     return label
-def label_organize(label, label_func):
-    '''
-    split the area into sectors, assume each sector at most one sound source
-    E.g., we get 1 (yes or no) + 1 (0-1) + 5 (one-hot distance) = 7 for each sector
-    '''
-    doa = label['doa_degree']; ranges = label['range']
-    assert len(doa) == len(ranges)
-    label = label_func(doa, ranges)
-    return label
-    
 
-class TIMIT_dataset(Dataset):
-    def __init__(self, split, sr=16000):
-        self.root_dir = 'TIMIT/' + split
-        self.data = []
-        self.sr = sr
-        for DR in os.listdir(self.root_dir):
-            for P in os.listdir(os.path.join(self.root_dir, DR)):
-                folder = os.path.join(self.root_dir, DR, P)
-                files = os.listdir(folder)
-                files = [os.path.join(folder, file) for file in files if file.endswith('.WAV')]
-                self.data += (files)
-    def __len__(self):
-        return len(self.data)
-    def __getitem__(self, idx):
-        audio = librosa.load(self.data[idx], sr=self.sr)[0]
-        # audio_trim, index = librosa.effects.trim(audio)
-        return audio
+def Gaussian(doa, ranges, config):
+    N = int(config['classifier']['max_azimuth'] - config['classifier']['min_azimuth'])
+    azimuth = []
+    y = np.linspace(config['classifier']['min_azimuth'], config['classifier']['max_azimuth'], N)
+    for d, r in zip(doa, ranges):
+        azimuth.append(np.exp(-((y - d[0]) ** 2) / (2 * 10 ** 2)))
+    azimuth = np.max(np.array(azimuth), axis=0).astype(np.float32)
+
+    N = int(config['classifier']['max_elevation'] - config['classifier']['min_elevation'])
+    elevation = []
+    y = np.linspace(config['classifier']['min_elevation'], config['classifier']['max_elevation'], N)
+    for d, r in zip(doa, ranges):
+        elevation.append(np.exp(-((y - d[1]) ** 2) / (2 * 10 ** 2)))
+    elevation = np.max(np.array(elevation), axis=0).astype(np.float32)
+
+    return (azimuth, elevation)
+
+def filter_label(labels, max_azimuth=90, min_azimuth=-90):
+    new_labels = []
+    for label in labels:
+        if label['doa_degree'][0][0] >= min_azimuth and label['doa_degree'][0][0] <= max_azimuth:
+            new_labels.append(label)
+    return new_labels
+
 class Main_dataset(Dataset):
-    def __init__(self, dataset='TIMIT/HRTF', split='TRAIN', label_func='DeepEAR', users=None, sr=16000, set_length=1):
-        self.root_dir = os.path.join(dataset, split)
-        self.data = []
+    def __init__(self, dataset, config=None, users=None, sr=16000, set_length=0.5):
+        self.config = config
+        self.encoding = globals()[self.config['encoding']]
+        self.root_dir = dataset
         with open(os.path.join(self.root_dir, 'label.json')) as f:
             self.labels = json.load(f)
-
-        self.data = [label['fname'] for label in self.labels]
+        self.labels = [label for label in self.labels]
+        self.labels = filter_label(self.labels, self.config['classifier']['max_azimuth'], self.config['classifier']['min_azimuth'])
         if users is not None:
-            self.data = [d for d in self.data if d.split('/')[-1].split('_')[0] in users]            
+            self.labels = [d for d in self.data if d['fname'].split('/')[-1].split('_')[0] in users]            
         self.sr = sr
-        self.gcc_phat_len = int(self.sr * 0.003)
+        self.gcc_phat_len = int(self.sr * 0.002)
         self.set_length = set_length
-        self.label_func = globals()[label_func]
     def prune_extend(self, audio_file):
-        if audio_file.shape[1] > (self.sr * self.set_length):
-            start_idx = np.random.randint(0, audio_file.shape[1] - self.sr * self.set_length)
-            audio_file = audio_file[:, start_idx : start_idx + self.sr * self.set_length]
+        length = int(self.sr * self.set_length)
+        if audio_file.shape[1] > length:
+            start_idx = np.random.randint(0, audio_file.shape[1] - length)
+            audio_file = audio_file[:, start_idx : start_idx + length]
         # zero padding
-        elif audio_file.shape[1] < (self.sr * self.set_length):
-            pad_len = (self.sr * self.set_length) - audio_file.shape[1]
+        elif audio_file.shape[1] < length:
+            pad_len = length - audio_file.shape[1]
             audio_file = np.pad(audio_file, ((0, 0), (0, pad_len)))
         return audio_file
     def __len__(self):
-        return len(self.data)
-    def preprocess(self, audio):
-        n = audio.shape[1] * 2 
-        X = np.fft.rfft(audio[0], n=n)
-        Y = np.fft.rfft(audio[1], n=n)
+        return len(self.labels)
+    def gccphat(self, audio1, audio2, interp=1):
+        n = audio1.shape[0] + audio2.shape[0] 
+        X = np.fft.rfft(audio1, n=n)
+        Y = np.fft.rfft(audio2, n=n)
         R = X * np.conj(Y)
-        R /= (np.abs(R) + 1e-6)
-        gccphat = np.fft.irfft(R)[:self.gcc_phat_len].astype(np.float32)
-        gammatone_left = gfcc.gfcc(audio[0], fs=self.sr, num_ceps=36, nfilts=50, nfft=int(self.sr * 0.05), low_freq=0, high_freq=8000, )
-        gammatone_right = gfcc.gfcc(audio[1], fs=self.sr, num_ceps=36, nfilts=50, nfft=int(self.sr * 0.05),low_freq=0, high_freq=8000,)
-        # gammatone_left = mfcc.mfcc(audio[0], fs=self.sr, num_ceps=100, nfilts=100, low_freq=0, high_freq=8000,)
-        # gammatone_right = mfcc.mfcc(audio[1], fs=self.sr, num_ceps=100, nfilts=100, low_freq=0, high_freq=8000,)
-        gammatone = np.concatenate((gammatone_left[np.newaxis, ...], gammatone_right[np.newaxis, ...]), axis=0, dtype=np.float32)
-        audio_feature = {'gcc_phat': gccphat, 'gammatone': gammatone}
+        cc = np.fft.irfft(R / (1e-6 + np.abs(R)),  n=(interp * n))
+        cc = np.concatenate((cc[-self.gcc_phat_len:], cc[:self.gcc_phat_len+1])).astype(np.float32)
+        return cc
+    def mel_gccphat(self, audio1, audio2):
+        n = audio1.shape[0] + audio2.shape[0]
+        melfb = librosa.filters.mel(sr=self.sr, n_fft=n, n_mels=40)
+        X = np.fft.rfft(audio1, n=n)
+        Y = np.fft.rfft(audio2, n=n)
+        R = X * np.conj(Y)
+        R_mel = melfb * R
+        cc = np.fft.irfft(R_mel / (np.abs(R_mel) + 1e-6), n=n)
+        cc = np.concatenate((cc[:, -self.gcc_phat_len:], cc[:, :self.gcc_phat_len+1]), axis=1).astype(np.float32)
+        cc = np.expand_dims(cc, axis=0)
+        return cc
+    def stft(self, audio):
+        S = librosa.stft(audio, n_fft=n_fft)
+        S_real = np.real(S)
+        S_imag = np.imag(S)
+        S = np.concatenate((S_real[np.newaxis, :], S_imag[np.newaxis, :]), axis=0, dtype=np.float32)
+        return S 
+    def gtcc(self, audio):
+        # Define the Gammatone filterbank parameters
+        gfccs = gfcc(audio, fs=self.sr, num_ceps=36, nfilts=48, nfft=n_fft).astype(np.float32)
+        return gfccs[np.newaxis, :]
+    def preprocess(self, audio):
+        audio_feature = {}
+        for key, value in self.config['backbone']['features'].items():
+            if value == 0:
+                continue
+            else:
+                if key in ['gccphat', 'mel_gccphat']: # pair-wise features
+                    audio_feature[key] = []
+                    key_features = []
+                    for i in range(audio.shape[0]):
+                        for j in range(i+1, audio.shape[0]):
+                            audio1, audio2 = audio[i], audio[j]
+                            key_features.append(getattr(self, key)(audio1, audio2))
+                    key_features = np.concatenate(key_features, axis=0)
+                    audio_feature[key] = key_features
+                elif key in ['stft', 'gtcc', 'mfcc']:
+                    audio_feature[key] = []
+                    key_features = []
+                    for i in range(audio.shape[0]):
+                        key_features.append(getattr(self, key)(audio[i]))
+                    key_features = np.concatenate(key_features, axis=0)
+                    audio_feature[key] = key_features
+                else:
+                    pass
         return audio_feature
     def __getitem__(self, idx):
-        audio = librosa.load(self.data[idx], sr=self.sr, mono=False)[0]
+        label = self.labels[idx]
+        file = os.path.join('data', label['fname'])
+        label = self.encoding(label['doa_degree'], label['range'], self.config)
+        if self.config['data'] == 'binaural':
+            audio = librosa.load(file + '.wav', sr=self.sr, mono=False)[0]
+        elif self.config['data'] == 'micarray':
+            audio = librosa.load(file + '_array.wav', sr=self.sr, mono=False)[0]
+        else:
+            raise NotImplementedError
         audio = self.prune_extend(audio)
-        label = self.labels[idx]
-        label = label_organize(label, self.label_func)
-        audio_feature = self.preprocess(audio)
-        return audio_feature, label
-    def get_raw(self, idx):
-        audio = librosa.load(self.data[idx], sr=self.sr, mono=False)[0]
-        label = self.labels[idx]
-        return audio, label
-class RAW_dataset(Dataset):
-    def __init__(self, dataset='RAW_HRTF', split='TRAIN'):
-        self.root_dir = os.path.join(dataset, split)
-        self.data = []
-        with open(os.path.join(self.root_dir, 'label.json')) as f:
-            self.labels = json.load(f)
-        self.data = [label['fname'] for label in self.labels]
-    def __len__(self):
-        return len(self.data)
-    def __getitem__(self, idx):
-        hrtf = np.load(self.data[idx]).astype(np.float32)
-        label = self.labels[idx]
-        label = label_organize(label)
-        return {'HRTF': hrtf}, label
+        audio_features = self.preprocess(audio)
+        if self.config['backbone']['features']['hrtf']:
+            hrtf = np.load(file + '.npy').astype(np.float32)
+            audio_features['hrtf'] = hrtf 
 
-
+        return audio_features, label
 
 
   

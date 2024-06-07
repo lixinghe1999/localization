@@ -1,0 +1,35 @@
+{
+    "pretrained": false,
+    "test_only": false,
+    "train_datafolder": "./data/TIMIT/hybrid_2_TRAIN",
+    "test_datafolder": "./data/TIMIT/hybrid_2_TEST",
+    "ckpt": "",
+    "data": "micarray",
+    "encoding": "Gaussian",
+    "backbone": {
+        "name": "DeepBSL",
+        "features": {
+            "gccphat": {
+                "input_feature": 975,
+                "hidden_feature": 512,
+                "output_feature": 384,
+                "comment": "the number of feature is 65 * N * (N-1) / 2, where N is the number of microphones"
+            },
+            "mel_gccphat":0,
+            "stft": 0,
+            "hrtf":0, 
+            "gtcc":0
+      }
+    },  
+    "classifier": 
+        {
+        "num_source": 2,
+        "name": "Gaussian",
+        "num_feature": 384,
+        "hidden_feature": 512,
+        "min_azimuth": -180,
+        "max_azimuth": 180,
+        "min_elevation": -90,
+        "max_elevation": 90  
+    }
+}
