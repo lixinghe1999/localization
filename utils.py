@@ -13,7 +13,7 @@ def minimal_distance(list1, list2, full_scale=360):
     
     error_matrix = np.empty((len1, len2))
     for i in range(len1):
-        error_matrix[i] = np.abs(array1[i] - array2)
+        # error_matrix[i] = np.abs(array1[i] - array2)
         error_matrix[i] = good_error(array1[i], array2, full_scale)
     # Find the minimum error
     min_error = np.mean(np.min(error_matrix, axis=1))

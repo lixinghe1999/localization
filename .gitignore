@@ -1,5 +1,6 @@
 data/HRTF-Database
 data/TIMIT
+data/ESC-50-master
 figs/
 ckpts
 *.pyc

@@ -116,7 +116,7 @@ class Main_dataset(Dataset):
                             key_features.append(getattr(self, key)(audio1, audio2))
                     key_features = np.concatenate(key_features, axis=0)
                     audio_feature[key] = key_features
-                elif key in ['stft', 'gtcc', 'mfcc']:
+                elif key in ['stft', 'gtcc', 'mfcc',]:
                     audio_feature[key] = []
                     key_features = []
                     for i in range(audio.shape[0]):
@@ -125,8 +125,9 @@ class Main_dataset(Dataset):
                     audio_feature[key] = key_features
                 else:
                     pass
+        audio_feature['raw'] = audio
         return audio_feature
-    def __getitem__(self, idx):
+    def __getitem__(self, idx): 
         label = self.labels[idx]
         file = os.path.join('data', label['fname'])
         label = self.encoding(label['doa_degree'], label['range'], self.config)

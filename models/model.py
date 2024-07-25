@@ -4,6 +4,8 @@ import torch
 import numpy as np
 from scipy.signal import find_peaks
 from utils import minimal_distance, good_error
+from models.tcnn import TCNN
+
 class Model(nn.Module):
     def __init__(self, backbone_config, classifier_config):
         super(Model, self).__init__()
@@ -17,6 +19,34 @@ class Model(nn.Module):
         for param in self.audiobackbone.parameters():
             param.requires_grad = False
     def forward(self, x):
+        x = self.audiobackbone(x)
+        x = self.classifier(x)
+        return x
+class Translate_Model(nn.Module):
+    def __init__(self, backbone_config, classifier_config):
+        super(Translate_Model, self).__init__()
+        self.audio_chunk = 320
+        self.translate_backbone = TCNN(backbone_config['translation']['input_channel'], backbone_config['translation']['output_channel'])
+        self.audiobackbone = globals()[backbone_config['name'] + '_backbone'](backbone_config)
+        self.classifier = globals()[classifier_config['name'] + '_classifier'](classifier_config)
+    def pretrained(self, fname):
+        if not fname:
+            return
+        ckpt = torch.load('ckpts/' + fname + '/best.pth')
+        self.load_state_dict(ckpt, strict=False)
+        for param in self.audiobackbone.parameters():
+            param.requires_grad = False
+        for param in self.classifier.parameters():
+            param.requires_grad = False
+        print('Pretrained model loaded {}'.format(fname))
+
+    def forward(self, x):
+        audio = x['raw']
+        audio = audio.reshape(audio.shape[0], audio.shape[1], -1, self.audio_chunk)
+        audio = self.translate_backbone(audio)
+
+        audio = audio.reshape(audio.shape[0], audio.shape[1], -1)
+        x['raw'] = audio
         x = self.audiobackbone(x)
         x = self.classifier(x)
         return x

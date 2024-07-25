@@ -1,5 +1,10 @@
+'''
+all the models are data to feature model
+'''
+
 import torch
 import torch.nn as nn
+from models.tcnn import TCNN_Encoder
 class CNN(nn.Module):
     def __init__(self, feature):
         super(CNN, self).__init__()
@@ -43,14 +48,30 @@ class MLP(nn.Module):
         x = self.fc_layer2(x)
         x = self.fc_layer3(x)
         return x
-class Transformer(torch.nn.Module):
+
+# class raw(torch.nn.Module):
+#     def __init__(self, feature):
+#         super().__init__()
+#         self.cnn = CNN(feature)
+#     def forward(self, x):
+#         batch, channel, time = x.shape
+#         if len(x.shape) == 3:
+#             x = x.reshape(-1, x.shape[2])
+#         stft = torch.stft(x, n_fft=512, hop_length=160, win_length=400, window=torch.hann_window(400).cuda(), return_complex=False)
+#         stft = torch.sqrt(stft[..., 0] ** 2 + stft[..., 1] ** 2)
+#         stft = torch.log(stft + 1e-5).reshape(batch, channel, 257, -1)
+#         return self.cnn(stft)
+
+class raw(torch.nn.Module):
     def __init__(self, feature):
         super().__init__()
-        self.fc = nn.Linear(feature['input_feature'], feature['hidden_feature'])
-        encoder_layer = nn.TransformerEncoderLayer(d_model=feature['hidden_feature'], nhead=4, dim_feedforward=feature['hidden_feature'])
-        self.model = torch.nn.TransformerEncoder(encoder_layer, num_layers=4)
-    def forward(self, batch):
-        return NotImplementedError
+        self.tcnn = TCNN_Encoder(feature['input_feature'], feature['output_feature'])
+        self.audio_chunk = 320
+    def forward(self, x):
+        x = x.reshape(x.shape[0], x.shape[1], -1, self.audio_chunk)
+        x = self.tcnn(x)
+        return x
+
 
 class stft(CNN):
     def __init__(self, feature):
@@ -61,7 +82,6 @@ class mel_gccphat(CNN):
 class gtcc(CNN):
     def __init__(self, feature):
         super(gtcc, self).__init__(feature)
-
 class gccphat(MLP):
     def __init__(self, feature):
         super(gccphat, self).__init__(feature)
