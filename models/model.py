@@ -3,14 +3,13 @@ from models.basic_model import *
 import torch
 import numpy as np
 from scipy.signal import find_peaks
-from utils import minimal_distance, good_error
 from models.tcnn import TCNN
 
 class Model(nn.Module):
     def __init__(self, backbone_config, classifier_config):
         super(Model, self).__init__()
-        self.audiobackbone = globals()[backbone_config['name'] + '_backbone'](backbone_config)
-        self.classifier = globals()[classifier_config['name'] + '_classifier'](classifier_config)
+        self.audiobackbone = globals()[backbone_config['name']](backbone_config)
+        self.classifier = globals()[classifier_config['name']](classifier_config)
     def pretrained(self, fname):
         if not fname:
             return
@@ -50,9 +49,9 @@ class Translate_Model(nn.Module):
         x = self.audiobackbone(x)
         x = self.classifier(x)
         return x
-class Gaussian_classifier(nn.Module):
+class Gaussian(nn.Module):
     def __init__(self, config):
-        super(Gaussian_classifier, self).__init__()
+        super(Gaussian, self).__init__()
         self.config = config
         self.fc_layers = nn.Sequential(
                         nn.Linear(self.config["num_feature"], self.config["hidden_feature"]),
@@ -85,6 +84,20 @@ class Gaussian_classifier(nn.Module):
         plt.plot(a_l)
         plt.savefig('figs/{}_{}.png'.format(epoch, i))
         plt.close()
+    def calculate_error(self, pred, labels, saturation):
+        error = np.min([np.abs(pred - labels), saturation - np.abs(pred - labels)], axis=0)
+        return np.mean(error)
+    def best_match(self, pred, labels, saturation):
+        errors = []
+        for l in labels:
+            dis_min = 1000
+            for p in pred:
+                dis = self.calculate_error(p, l, saturation)
+                if dis < dis_min:
+                    dis_min = dis
+            errors.append(dis_min)
+        return np.mean(errors)
+            
 
     def eval(self, preds, labels):
         metric_dict = {'azimuth': [], 'elevation': []}
@@ -94,8 +107,8 @@ class Gaussian_classifier(nn.Module):
             if self.num_source == 1:
                 peak_azimuth, peak_elevation = np.argmax(azimuth, axis=1), np.argmax(elevation, axis=1)
                 peak_azimuth_label, peak_elevation_label = np.argmax(azimuth_label, axis=1), np.argmax(elevation_label, axis=1)
-                azimuth_loss = np.mean(good_error(peak_azimuth, peak_azimuth_label, 360))
-                elevation_loss = np.mean(good_error(peak_elevation, peak_elevation_label, 180))
+                azimuth_loss = self.calculate_error(peak_azimuth, peak_azimuth_label, 360)
+                elevation_loss = self.calculate_error(peak_elevation, peak_elevation_label, 180)
             else:
                 azimuth_loss = []; elevation_loss = []
                 for a, e, a_l, e_l in zip(azimuth, elevation, azimuth_label, elevation_label):
@@ -104,8 +117,8 @@ class Gaussian_classifier(nn.Module):
                     elevation_peaks = find_peaks(e, height=0.5, distance=10)[0]
                     azimuth_peak_labels = find_peaks(a_l, height=0.5, distance=10)[0]
                     elevation_peak_labels = find_peaks(e_l, height=0.5, distance=10)[0]
-                    match_azimuth = minimal_distance(azimuth_peaks, azimuth_peak_labels, 360)
-                    match_elevation = minimal_distance(elevation_peaks, elevation_peak_labels, 180)
+                    match_azimuth = self.best_match(azimuth_peaks, azimuth_peak_labels, 360)
+                    match_elevation = self.best_match(elevation_peaks, elevation_peak_labels, 180)
  
                     azimuth_loss.append(match_azimuth)
                     elevation_loss.append(match_elevation)
@@ -118,60 +131,101 @@ class Gaussian_classifier(nn.Module):
         metric_dict['elevation'] = sum(metric_dict['elevation']) / len(metric_dict['elevation'])
 
         return metric_dict
-class DeepBSL_classifier(nn.Module):
+class Distance(nn.Module):
     def __init__(self, config):
-        super(DeepBSL_classifier, self).__init__()
+        super(Distance, self).__init__()
         self.config = config
         self.fc_layers = nn.Sequential(
-                        nn.Linear(self.config["num_feature"], 128),
+                        nn.Linear(self.config["num_feature"], self.config["hidden_feature"]),
                         nn.ReLU(),
-                        nn.Linear(128, 128),
+                        nn.Linear(self.config["hidden_feature"], self.config["hidden_feature"]),
                         nn.Dropout(0.2),
                         nn.ReLU(),
-                        nn.Linear(128, 128),
+                        nn.Linear(self.config["hidden_feature"], self.config["hidden_feature"]),
                         nn.Dropout(0.2),
-                        nn.ReLU(),
-                        nn.Linear(128, 2),
-                        nn.Sigmoid(),)
-        self.num_source = config['num_source']
+                        nn.ReLU(),)
+        self.distance = nn.Linear(self.config["hidden_feature"], 1)
     def forward(self, x):
         x = self.fc_layers(x)
-        return x
+        distance = torch.sigmoid(self.distance(x))
+        return distance
     def get_loss(self, pred, labels):      
-        diff = torch.abs(pred - labels[:, 0, :].to(pred.device))
-        diff = torch.min(diff, 1 - diff)
-        sound_loss = diff.mean()
-        return sound_loss
+        loss = nn.functional.mse_loss(pred, labels.to(pred.device))
+        return loss
+    def vis(self, pred, labels, epoch, i):
+        import matplotlib.pyplot as plt
+        distance = pred.cpu().detach().numpy()
+        distance_label = labels.cpu().detach().numpy()
+        fig = plt.figure()
+        d = distance[0]; d_l = distance_label[0]
+        plt.plot(d/np.max(d)); 
+        plt.plot(d_l)
+        plt.savefig('figs/{}_{}.png'.format(epoch, i))
+        plt.close()
     def eval(self, preds, labels):
-        metric_dict = {'azimuth': [], 'elevation': []}
-        for pred, label in zip(preds, labels):
-            if self.num_source == 1:
-                labels = labels[:, 0, :].to(pred.device)
-                sound_loss = torch.abs(pred - label)
-                sound_loss = torch.min(sound_loss, 1 - sound_loss)
-                azimuth_loss = sound_loss[:, 0].mean() * (self.config['max_azimuth'] - self.config['min_azimuth'])
-                elevation_loss = sound_loss[:, 1].mean() * (self.config['max_elevation'] - self.config['min_elevation'])
-                metric_dict['azimuth'].append(azimuth_loss.item())
-                metric_dict['elevation'].append(elevation_loss.item())
-            else:
-                raise NotImplementedError
-
-        metric_dict['azimuth'] = sum(metric_dict['azimuth']) / len(metric_dict['azimuth'])
-        metric_dict['elevation'] = sum(metric_dict['elevation']) / len(metric_dict['elevation'])
+        metric_dict = {'distance': []}
+        for distance, distance_label in zip(preds, labels):
+            distance = distance.cpu().detach()
+            distance_label = distance_label.cpu().detach()
+            distance_loss = nn.functional.l1_loss(distance, distance_label).item()
+            metric_dict['distance'].append(distance_loss)
+        metric_dict['distance'] = sum(metric_dict['distance']) / len(metric_dict['distance'])
         return metric_dict
-class DeepBSL_backbone(nn.Module):
+class Cartesian(nn.Module):
     def __init__(self, config):
-        super(DeepBSL_backbone, self).__init__()
+        super(Cartesian, self).__init__()
+        self.config = config
+        self.fc_layers = nn.Sequential(
+                        nn.Linear(self.config["num_feature"], self.config["hidden_feature"]),
+                        nn.ReLU(),
+                        nn.Linear(self.config["hidden_feature"], self.config["hidden_feature"]),
+                        nn.Dropout(0.2),
+                        nn.ReLU(),
+                        nn.Linear(self.config["hidden_feature"], self.config["hidden_feature"]),
+                        nn.Dropout(0.2),
+                        nn.ReLU(),)
+        self.xyz = nn.Linear(self.config["hidden_feature"], 3)
+    def forward(self, x):
+        x = self.fc_layers(x)
+        xyz = self.xyz(x)
+        return xyz
+    def get_loss(self, pred, labels):
+        loss = nn.functional.mse_loss(pred, labels.to(pred.device))
+        return loss
+    def vis(self, pred, labels, epoch, i):
+        import matplotlib.pyplot as plt
+        xyz = pred.cpu().detach().numpy()
+        xyz_label = labels.cpu().detach().numpy()
+        fig = plt.figure()
+        x = xyz[0]; x_l = xyz_label[0]
+        plt.plot(x/np.max(x)); 
+        plt.plot(x_l)
+        plt.savefig('figs/{}_{}.png'.format(epoch, i))
+        plt.close()
+    def eval(self, preds, labels):
+        metric_dict = {'xyz': []}
+        for xyz, xyz_label in zip(preds, labels):
+            xyz = xyz.cpu().detach()
+            xyz_label = xyz_label.cpu().detach()
+            xyz_loss = nn.functional.l1_loss(xyz, xyz_label).item()
+            metric_dict['xyz'].append(xyz_loss)
+        metric_dict['xyz'] = sum(metric_dict['xyz']) / len(metric_dict['xyz'])
+        return metric_dict
+
+class Vanilla(nn.Module):
+    def __init__(self, config):
+        super(Vanilla, self).__init__()
+        self.encoders = nn.ModuleDict()
         for k, v in config['features'].items():
             if v == 0:
                 continue
             else:
-                setattr(self, k, globals()[k](v))
+                self.encoders[k] = globals()[k](v)
+
     def forward(self, x):
         feature_list = []
-        for k, v in x.items():
-            x = getattr(self, k)(v)
-            feature_list.append(x)
+        for k, encoder in self.encoders.items():
+            feature_list.append(encoder(x[k]))
         feat = torch.cat(feature_list, dim=1)
         return feat
 

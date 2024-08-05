@@ -1,6 +1,6 @@
 import torch
 import torch.optim as optim
-from torch_dataset import Main_dataset
+from utils.dataset import Main_dataset
 from models.model import Model
 from tqdm import tqdm
 
@@ -20,7 +20,7 @@ def train(model, train_loader, test_loader, optimizer, num_epochs):
             outputs = model(binaural)
             label_list.append(labels); output_list.append(outputs)
             loss = model.classifier.get_loss(outputs, labels)
-            if i % 200 == 0:
+            if i % 500 == 0:
                 model.classifier.vis(outputs, labels, epoch, i)
             loss.backward()
             optimizer.step()
@@ -70,7 +70,7 @@ if __name__ == '__main__':
     import json
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, default='configs/binaural_default.json')
+    parser.add_argument('--config', type=str, default='configs/gcc_xyz.json')
     args = parser.parse_args()
 
     config = json.load(open(args.config, 'r'))
@@ -80,11 +80,12 @@ if __name__ == '__main__':
     test_dataset = Main_dataset(config['test_datafolder'], config)
     print('train dataset {}, test dataset {}'.format(len(train_dataset), len(test_dataset)))
 
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=16, shuffle=True, num_workers=8)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=8, shuffle=False, num_workers=4)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=8)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False, num_workers=4)
     # Define your model, loss function, and optimizer
     model = Model(backbone_config=config['backbone'], classifier_config=config['classifier']).to(device)
-    model.pretrained(config['pretrained']) # also freeze
+    if config['pretrained']:
+        model.pretrained(config['ckpt']) # also freeze
 
     # Train your model
     if config['test_only']:
@@ -95,4 +96,4 @@ if __name__ == '__main__':
         optimizer = optim.Adam(model.parameters(), lr=0.0001)
         save_folder = 'ckpts/' + time.strftime("%Y-%m-%d-%H-%M-%S")
         os.makedirs(save_folder, exist_ok=True)
-        train(model, train_loader, test_loader, optimizer, num_epochs=10)
+        train(model, train_loader, test_loader, optimizer, num_epochs=config['epochs'])

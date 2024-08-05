@@ -1,4 +1,4 @@
-# Binaural ToolBox @ Lixing He (helixing99@gmail.com)
+# Multi-channel audio ToolBox @ Lixing He (helixing99@gmail.com)
 
 1. Simulation with Pyroomacoustics or HRTF
 2. Dataset: TIMIT and ESC-50
