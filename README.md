@@ -1,9 +1,16 @@
 # Multi-channel audio ToolBox @ Lixing He (helixing99@gmail.com)
+## Simulation (./simulate)
+1. HRTF simulation
+2. Pyroomacoustic simulation
+## Dataset (./dataset)
+1. Depth sensor groundtruth
+2. Audio + IMU collection tool
 
-1. Simulation with Pyroomacoustics or HRTF
-2. Dataset: TIMIT and ESC-50
-3. Project1: Deep learning DOA finding as well as ranging
-4. Project2: Translation from noisy binaural to user-friendly binaural
-5. Project3: Binaural from Vision 
-    1) Directional audio hints (static)
-    2) Interaction-based audio hints
+## Localization (./)
+1. DOA estimation by Gaussian encoding
+2. xyz estimation
+3. range estimation
+
+## Audio2Audio (./)
+1. Separation
+2. Translate microphone array to binaural
