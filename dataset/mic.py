@@ -1,22 +1,23 @@
 import sounddevice as sd
 import wave
-def receive_audio():
+import os
+import time
+def receive_audio(dataset_folder, duration=5):
     '''
     receive by sounddevice and save the audio data
     '''
     # Set the parameters
     sd.default.device = 1
     fs = 48000
-    duration = 5  # seconds
     channels = 8
-    filename = 'output.wav'
+    filename = os.path.join(dataset_folder, f'{str(time.time())}_glasses.wav')
     # Record the audio
-    print('Recording...')
+    print('Recording audio start...')
     myrecording = sd.rec(int(duration * fs), samplerate=fs, channels=channels, dtype='int16')
     sd.wait()
-    print('Recording done...')
+    print('Recording audio done...')
     # Save the audio
-    print('Saving...')
+    print('Saving audio...')
     waveFile = wave.open(filename, 'wb')
     waveFile.setnchannels(channels) 
     waveFile.setsampwidth(2)

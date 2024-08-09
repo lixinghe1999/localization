@@ -5,9 +5,7 @@ sys.path.append('./BaseSDK_python_wrapper')
 from BaseSDK_python_wrapper.DCAM710.API.Vzense_api_710 import *
 import cv2
 import time
-import multiprocessing as mp
-from tqdm import tqdm
-
+import copy
 def scan_camera():
     camera = VzenseTofCam()
     camera_count = camera.Ps2_GetDeviceCount()
@@ -41,19 +39,20 @@ def scan_camera():
     return camera, ret
 
 def write_frame(frame, writer, value_max):
-    frametmp = numpy.ctypeslib.as_array(frame.pFrameData, (1, frame.width * frame.height * 2))
-    frametmp.dtype = numpy.uint16
-    frametmp.shape = (frame.height, frame.width)
-
     #convert ushort value to 0xff is just for display
-    img = numpy.int32(frametmp)
+    img = numpy.int32(frame)
     img = img*255/value_max
     img = numpy.clip(img, 0, 255)
     img = numpy.uint8(img)
+    # img = cv2.equalizeHist(img)
     # img = cv2.applyColorMap(img, cv2.COLORMAP_RAINBOW)
     writer.write(img)
     
-def record(name, camera, max_frames = 0):
+def record(name, max_frames = 0):
+    camera, ret = scan_camera()
+    if ret != 0:
+        print('Ps2_OpenDevice failed: ' + str(ret))
+        return
     ret = camera.Ps2_StartStream()
     if  ret == 0:
         print("start stream successful")
@@ -73,23 +72,35 @@ def record(name, camera, max_frames = 0):
         print("Ps2_GetMeasuringRange: ",depth_max,",",value_min,",",value_max)
     else:
         print("Ps2_GetMeasuringRange failed:",ret)
-
-    # rgb_writer = cv2.VideoWriter(os.path.join(name, 'rgb.avi'), cv2.VideoWriter_fourcc(*'XVID'), 30, (640, 360))
-    depth_writer = cv2.VideoWriter(os.path.join(name, 'depth.avi'), cv2.VideoWriter_fourcc(*'XVID'), 30, (640, 480), isColor=False)
-    ir_writer = cv2.VideoWriter(os.path.join(name, 'ir.avi'), cv2.VideoWriter_fourcc(*'XVID'), 30, (640, 480),  isColor=False)
     time_start = time.time()
+    # rgb_writer = cv2.VideoWriter(os.path.join(name, 'rgb.avi'), cv2.VideoWriter_fourcc(*'XVID'), 30, (640, 360))
+    depth_writer = cv2.VideoWriter(os.path.join(name, str(time_start) + '_depth.avi'), cv2.VideoWriter_fourcc(*'XVID'), 30, (640, 480), isColor=False)
+    ir_writer = cv2.VideoWriter(os.path.join(name, str(time_start) + '_ir.avi'), cv2.VideoWriter_fourcc(*'XVID'), 30, (640, 480),  isColor=False)
     depthframes = []; irframes = []
     try:
-        for frames in tqdm(range(max_frames)):
+        for frames in range(max_frames):
             ret, frameready = camera.Ps2_ReadNextFrame()
             if  ret !=0:
                 print("Ps2_ReadNextFrame failed:",ret)
                 time.sleep(1)
                 continue
-            ret,depthframe = camera.Ps2_GetFrame(PsFrameType.PsDepthFrame)
-            depthframes.append(depthframe)
-            ret,irframe = camera.Ps2_GetFrame(PsFrameType.PsIRFrame)
-            irframes.append(irframe)
+            if  frameready.depth:    
+                ret,depthframe = camera.Ps2_GetFrame(PsFrameType.PsDepthFrame)
+
+                frametmp = numpy.ctypeslib.as_array(depthframe.pFrameData, (1, depthframe.width * depthframe.height * 2))
+                frametmp.dtype = numpy.uint16
+                frametmp.shape = (depthframe.height, depthframe.width)
+                frametmp = copy.deepcopy(frametmp) 
+                depthframes.append(frametmp)
+            if frameready.ir:
+                ret,irframe = camera.Ps2_GetFrame(PsFrameType.PsIRFrame)
+
+                frametmp = numpy.ctypeslib.as_array(irframe.pFrameData, (1, irframe.width * irframe.height * 2))
+                frametmp.dtype = numpy.uint16
+                frametmp.shape = (irframe.height, irframe.width)
+                frametmp = copy.deepcopy(frametmp) 
+                irframes.append(frametmp)
+
             # if  frameready.rgb:      
             #     ret,rgbframe = camera.Ps2_GetFrame(PsFrameType.PsRGBFrame)
             #     if  ret == 0:
@@ -104,8 +115,8 @@ def record(name, camera, max_frames = 0):
     finally:
         print("frames: ", frames, "frames per second: ", frames/(time.time()-time_start))
         time_start = time.time()
-        print("start writing")
-        for (depthframe, irframe) in tqdm(zip(depthframes, irframes), total=len(depthframes)):
+        print("start writing video")
+        for (depthframe, irframe) in zip(depthframes, irframes):
             write_frame(depthframe, depth_writer, value_max)
             write_frame(irframe, ir_writer, 3840)
         print("finished writing, takes: ", time.time()-time_start)
@@ -113,8 +124,9 @@ def record(name, camera, max_frames = 0):
             
 
 if __name__ == "__main__":
-    camera, ret = scan_camera()
-    if ret == 0:
-        record('', camera, 100)
-    else:
-        print('Ps2_OpenDevice failed: ' + str(ret))  
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-d", "--duration", type=int, default=5)
+    parser.add_argument("-f", "--folder", type=str, default='.')
+    args = parser.parse_args()
+    record('', 50)
