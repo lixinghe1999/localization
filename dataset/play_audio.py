@@ -11,7 +11,7 @@ def random_audio(audio_type):
     if audio_type == 'ESC50':
         audio_path = 'ESC-50-master/audio/'
     elif audio_type == 'TIMIT':
-        audio_path = 'TIMIT/TRAIN'
+        audio_path = 'TIMIT/TRAIN'        
     audio_files = os.listdir(audio_path)
     random_audio = random.choice(audio_files)
     return os.path.join(audio_path, random_audio)

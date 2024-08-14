@@ -87,6 +87,22 @@ def bmi160(dataset_folder, sample_rate=1600, t=5, port=1):
     real_sample_rate = sample_rate * t / (time.time() - t_start)
     print('IMU port:', port, 'sample rate:', real_sample_rate)
     return real_sample_rate
+def vis(file):
+    import matplotlib.pyplot as plt
+    import numpy as np
+    data = np.loadtxt(file)
+    fig, axs = plt.subplots(2, 1)
+    timestamp = data[:, -1] - data[0, -1]
+    axs[0].plot(timestamp, data[:, 0], 'r', label='gx')
+    axs[0].plot(timestamp, data[:, 1], 'g', label='gy')
+    axs[0].plot(timestamp, data[:, 2], 'b', label='gz')
+    plt.legend()
+
+    axs[1].plot(timestamp, data[:, 3], 'r', label='ax')
+    axs[1].plot(timestamp, data[:, 4], 'g', label='ay')
+    axs[1].plot(timestamp, data[:, 5], 'b', label='az')
+    plt.legend()
+    plt.savefig('bmi160.png')
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
@@ -94,5 +110,6 @@ if __name__ == "__main__":
     parser.add_argument("-f", "--folder", type=str, default='.')
     args = parser.parse_args()
     sr = bmi160(args.folder, 400, args.duration, 1)
+    vis('bmi160_1.txt')
     #sr1 = bmi160_accsave('.', 400, 3, port=1)
     # sr2 = bmi160_gyrosave('.', 400, 3, port=1)

@@ -3,6 +3,8 @@ simulate/TIMIT
 simulate/ESC-50-master
 figs/
 ckpts
+*.png
+*.jpg
 *.avi
 *.txt
 *.pyc
