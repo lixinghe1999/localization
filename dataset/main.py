@@ -12,11 +12,16 @@ if __name__ == "__main__":
     parser.add_argument("--imu", type=int, default=0) # 0: no imu, 1: left, 2: right, 3: both
     parser.add_argument("--camera", type=int, default=0) # 0: no camera, 1: yes
     parser.add_argument("--audio", type=int, default=0) # 0: no audio, 1: Binaural
+    parser.add_argument("--time", type=str, default=None)
     parser.add_argument("-d", "--duration", type=int, default=5)
     args = parser.parse_args()
 
-    pre_date = datetime.datetime.now().strftime("%Y-%m-%d")
-    post_date = datetime.datetime.now().strftime("%H-%M-%S")
+    if args.time is not None:
+        pre_date = args.time.split('_')[0]
+        post_date = args.time.split('_')[1]
+    else:
+        pre_date = datetime.datetime.now().strftime("%Y-%m-%d")
+        post_date = datetime.datetime.now().strftime("%H-%M-%S")
     dataset_folder = os.path.join(pre_date, post_date)
     os.makedirs(dataset_folder, exist_ok=True)
 

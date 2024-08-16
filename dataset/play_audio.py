@@ -45,7 +45,7 @@ if __name__ == '__main__':
             log = json.load(open(config_file, 'r'))
             current_time = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
 
-            execute_command(client, f'python3 /home/pi/collect_data.py {current_time}')
+            execute_command(client, f'python main.py --imu 3 --audio 1 --time {current_time}')
 
             log = play_audio(log)
             with open(f'log/{current_time}.json', 'w') as f:
