@@ -47,8 +47,9 @@ def write_frame(frame, writer, value_max):
     # img = cv2.equalizeHist(img)
     # img = cv2.applyColorMap(img, cv2.COLORMAP_RAINBOW)
     writer.write(img)
-    
-def record(name, max_frames = 0):
+    return img
+
+def record_ir(name):
     camera, ret = scan_camera()
     if ret != 0:
         print('Ps2_OpenDevice failed: ' + str(ret))
@@ -61,6 +62,58 @@ def record(name, max_frames = 0):
     ret = camera.Ps2_SetDataMode(PsDataMode.PsDepthAndIR_30)
     if  ret != 0:  
         print("Ps2_SetDataMode failed:",ret)
+
+
+
+    ret, depthrange = camera.Ps2_GetDepthRange()
+    if  ret == 0:
+        print("Ps2_GetDepthRange :",depthrange.value)
+    else:
+        print("Ps2_GetDepthRange failed:",ret)
+
+    ret, depth_max, value_min, value_max = camera.Ps2_GetMeasuringRange(PsDepthRange(depthrange.value))
+    if  ret == 0:
+        print("Ps2_GetMeasuringRange: ",depth_max,",",value_min,",",value_max)
+    else:
+        print("Ps2_GetMeasuringRange failed:",ret)
+    time_start = time.time()
+    ret, frameready = camera.Ps2_ReadNextFrame()
+    print(frameready.ir)
+    while True:
+        if frameready.ir:
+            ret,irframe = camera.Ps2_GetFrame(PsFrameType.PsIRFrame)
+
+            frametmp = numpy.ctypeslib.as_array(irframe.pFrameData, (1, irframe.width * irframe.height * 2))
+            frametmp.dtype = numpy.uint16
+            frametmp.shape = (irframe.height, irframe.width)
+
+            img = numpy.int32(frametmp)
+            img = img*255/value_max
+            img = numpy.clip(img, 0, 255)
+            img = numpy.uint8(img)
+            cv2.imwrite(name, img)
+            break
+    print("finished writing, takes: ", time.time()-time_start)
+
+
+def record_video(name, fps=30, duration = 1):
+    camera, ret = scan_camera()
+    if ret != 0:
+        print('Ps2_OpenDevice failed: ' + str(ret))
+        return
+    ret = camera.Ps2_StartStream()
+    if  ret == 0:
+        print("start stream successful")
+    else:
+        print("Ps2_StartStream failed:",ret)
+    ret = camera.Ps2_SetDataMode(PsDataMode.PsDepthAndIR_30)
+    if  ret != 0:  
+        print("Ps2_SetDataMode failed:",ret)
+
+    ret = camera.Ps2_SetDepthRange(PsDepthRange.PsMidRange)
+    if  ret != 0:  
+        print("Ps2_SetDepthRange failed:",ret)
+
     ret, depthrange = camera.Ps2_GetDepthRange()
     if  ret == 0:
         print("Ps2_GetDepthRange :",depthrange.value)
@@ -77,6 +130,7 @@ def record(name, max_frames = 0):
     depth_writer = cv2.VideoWriter(os.path.join(name, str(time_start) + '_depth.avi'), cv2.VideoWriter_fourcc(*'XVID'), 30, (640, 480), isColor=False)
     ir_writer = cv2.VideoWriter(os.path.join(name, str(time_start) + '_ir.avi'), cv2.VideoWriter_fourcc(*'XVID'), 30, (640, 480),  isColor=False)
     depthframes = []; irframes = []
+    max_frames = duration * fps
     try:
         for frames in range(max_frames):
             ret, frameready = camera.Ps2_ReadNextFrame()
@@ -128,5 +182,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--duration", type=int, default=5)
     parser.add_argument("-f", "--folder", type=str, default='.')
+    parser.add_argument("-n", "--name", type=int, default=1)
     args = parser.parse_args()
-    record('', 50)
+    #record_video('', 50)   
+    record_ir(f'ir{args.name}.png')

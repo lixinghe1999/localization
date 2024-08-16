@@ -6,6 +6,8 @@ dataset/ESC-50-master
 figs/
 ckpts
 *.json
+*.png
+*.jpg
 *.avi
 *.txt
 *.pyc
