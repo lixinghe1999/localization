@@ -6,49 +6,51 @@ import librosa
 import sounddevice as sd
 import numpy as np
 import datetime
-def random_audio(audio_type):
-    import random
-    if audio_type == 'ESC50':
-        audio_path = 'ESC-50-master/audio/'
-    elif audio_type == 'TIMIT':
-        audio_path = 'TIMIT/TRAIN'
-    audio_files = os.listdir(audio_path)
-    random_audio = random.choice(audio_files)
-    return os.path.join(audio_path, random_audio)
-def play_audio(audio_type, duration=5):
+from audio_sample import audio_sample
+from ssh_control import create_connection, execute_command
+
+def play_audio(log):
     # Importing the necessary libraries
-    log = {}
     current_time = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
     log['time'] = current_time
-    log['audio_type'] = audio_type
-    log['selected_audio'] = []
-    for _audio_type in audio_type:
-        log['selected_audio'].append(random_audio(_audio_type))
+    log['left_audio'] = audio_sample(log['left_type'])
+    log['right_audio'] = audio_sample(log['right_type'])
+    if log['mono']:
+        log['right_audio'] = log['left_audio']
+    print(f'Playing audio: {log["left_audio"]} and {log["right_audio"]}')
     audios = []
-    assert len(log['selected_audio']) <=2 # Only support up to 2 audio files: Two sound source
-    for audio_file in log['selected_audio']:
+    for audio_file in [log['left_audio'], log['right_audio']]:
         audio, fs = librosa.load(audio_file, sr=16000)
-        if len(audio) < duration*fs:
-            zeros = np.zeros(duration*fs - len(audio))
-            audio = np.concatenate((audio, zeros))
-        else:
-            audio = audio[:duration*fs]
-        audios.append(audio[:, None])    
+        audios.append(audio[:, None])   
+    n_sample = 0
+    for audio in audios:
+        n_sample = max(audio.shape[0], n_sample)
+    for i, audio in enumerate(audios):
+        if audio.shape[0] < n_sample:
+            audios[i] = np.pad(audio, ((0, n_sample - audio.shape[0]), (0, 0)), 'constant')    
     audio = np.concatenate(audios, axis=1)
-    print('Playing audio')
+    print('Playing audio... with shape:', audio.shape)
     sd.play(audio, fs, blocking=True)
     print('Finished playing audio')
     return log
-def main():
-    import json
-    number_of_audio = 1
-    logs = []
-    current_time = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-    for i in range(number_of_audio):
-        log = play_audio(['ESC50', 'ESC50'])
-        logs.append(log)
-
-    with open(f'log/{current_time}.json', 'w') as f:
-        json.dump(logs, f)
+    
 if __name__ == '__main__':
-    main()
+    import json
+    while True:
+        client = create_connection()
+        print('Connected to the Raspberry Pi!')
+        a = input('press 1 to play audio (edit the config first), press 2 to exit')
+        if a == '1':
+            config_file = 'collect_config.json'
+            log = json.load(open(config_file, 'r'))
+            current_time = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+
+            execute_command(client, f'python3 /home/pi/collect_data.py {current_time}')
+
+            log = play_audio(log)
+            with open(f'log/{current_time}.json', 'w') as f:
+                json.dump(log, f, indent=4)
+        elif a == '2':
+            exit()
+        
+        
