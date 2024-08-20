@@ -8,3 +8,6 @@ ckpts
 *.pyc
 *.wav
 *.npy
+*.csv
+*.mp4
+*.png

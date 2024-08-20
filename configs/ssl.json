@@ -1,0 +1,32 @@
+{
+    "pretrained": false,
+    "test_only": false,
+    "train_datafolder": "./simulate/TIMIT/1/hrtf_TRAIN",
+    "test_datafolder": "./simulate/TIMIT/1/hrtf_TEST",
+    "ckpt": "",
+    "encoding": "Gaussian",
+    "duration": 5,
+    "batch_size": 64,
+    "epochs": 100,
+    "backbone": {
+        "name": "Vanilla",
+        "features": {
+            "gccphat": {
+                "input_feature": 65,
+                "hidden_feature": 256,
+                "output_feature": 256
+            }
+      }
+    }, 
+    "classifier": 
+        {
+        "num_source": 1,
+        "name": "Gaussian",
+        "num_feature": 256,
+        "hidden_feature": 512,
+        "min_azimuth": 0,
+        "max_azimuth": 360,
+        "min_elevation": -90,
+        "max_elevation": 90  
+    }
+}

@@ -1,7 +1,7 @@
 import torch
 import torch.optim as optim
-from utils.dataset import Main_dataset
-from models.model import Model
+from utils.torch_dataset import Main_dataset
+from models.ssl_model import SSL_Model
 from tqdm import tqdm
 
 # Define your training loop
@@ -20,8 +20,8 @@ def train(model, train_loader, test_loader, optimizer, num_epochs):
             outputs = model(binaural)
             label_list.append(labels); output_list.append(outputs)
             loss = model.classifier.get_loss(outputs, labels)
-            if i % 500 == 0:
-                model.classifier.vis(outputs, labels, epoch, i)
+            # if i % 500 == 0:
+            #     model.classifier.vis(outputs, labels, epoch, i)
             loss.backward()
             optimizer.step()
             loss_sum += loss.item()
@@ -70,7 +70,7 @@ if __name__ == '__main__':
     import json
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, default='configs/gcc_xyz.json')
+    parser.add_argument('--config', type=str, default='configs/ssl_2.json')
     args = parser.parse_args()
 
     config = json.load(open(args.config, 'r'))
@@ -79,11 +79,18 @@ if __name__ == '__main__':
     train_dataset = Main_dataset(config['train_datafolder'], config)
     test_dataset = Main_dataset(config['test_datafolder'], config)
     print('train dataset {}, test dataset {}'.format(len(train_dataset), len(test_dataset)))
+    
+    train_dataset.feature_folder = 'features/train'
+    test_dataset.feature_folder = 'features/test'
+
+    # print('compute feature for the dataset (only once)')
+    # train_dataset.pre_compute_feature('features/train')
+    # test_dataset.pre_compute_feature('features/test')
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=8)
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False, num_workers=4)
     # Define your model, loss function, and optimizer
-    model = Model(backbone_config=config['backbone'], classifier_config=config['classifier']).to(device)
+    model = SSL_Model(backbone_config=config['backbone'], classifier_config=config['classifier']).to(device)
     if config['pretrained']:
         model.pretrained(config['ckpt']) # also freeze
 

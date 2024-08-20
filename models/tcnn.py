@@ -175,6 +175,7 @@ class TCNN_Encoder(nn.Module):
         output = self.fc(reshape_2)
         return output
 # input: (B, 1, T, 320)    T为帧数，320为帧长
+
 class TCNN(nn.Module):
     def __init__(self, input_channel=1, output_channel=1):
         super(TCNN, self).__init__()

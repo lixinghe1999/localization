@@ -1,13 +1,12 @@
 import torch.nn as nn
-from models.basic_model import *
+from models.basic_model import gccphat, mel_spec
 import torch
 import numpy as np
 from scipy.signal import find_peaks
-from models.tcnn import TCNN
-
-class Model(nn.Module):
+from models.utils import minimal_distance, good_error
+class SSL_Model(nn.Module):
     def __init__(self, backbone_config, classifier_config):
-        super(Model, self).__init__()
+        super(SSL_Model, self).__init__()
         self.audiobackbone = globals()[backbone_config['name']](backbone_config)
         self.classifier = globals()[classifier_config['name']](classifier_config)
     def pretrained(self, fname):
@@ -21,34 +20,7 @@ class Model(nn.Module):
         x = self.audiobackbone(x)
         x = self.classifier(x)
         return x
-class Translate_Model(nn.Module):
-    def __init__(self, backbone_config, classifier_config):
-        super(Translate_Model, self).__init__()
-        self.audio_chunk = 320
-        self.translate_backbone = TCNN(backbone_config['translation']['input_channel'], backbone_config['translation']['output_channel'])
-        self.audiobackbone = globals()[backbone_config['name'] + '_backbone'](backbone_config)
-        self.classifier = globals()[classifier_config['name'] + '_classifier'](classifier_config)
-    def pretrained(self, fname):
-        if not fname:
-            return
-        ckpt = torch.load('ckpts/' + fname + '/best.pth')
-        self.load_state_dict(ckpt, strict=False)
-        for param in self.audiobackbone.parameters():
-            param.requires_grad = False
-        for param in self.classifier.parameters():
-            param.requires_grad = False
-        print('Pretrained model loaded {}'.format(fname))
 
-    def forward(self, x):
-        audio = x['raw']
-        audio = audio.reshape(audio.shape[0], audio.shape[1], -1, self.audio_chunk)
-        audio = self.translate_backbone(audio)
-
-        audio = audio.reshape(audio.shape[0], audio.shape[1], -1)
-        x['raw'] = audio
-        x = self.audiobackbone(x)
-        x = self.classifier(x)
-        return x
 class Gaussian(nn.Module):
     def __init__(self, config):
         super(Gaussian, self).__init__()
@@ -84,20 +56,6 @@ class Gaussian(nn.Module):
         plt.plot(a_l)
         plt.savefig('figs/{}_{}.png'.format(epoch, i))
         plt.close()
-    def calculate_error(self, pred, labels, saturation):
-        error = np.min([np.abs(pred - labels), saturation - np.abs(pred - labels)], axis=0)
-        return np.mean(error)
-    def best_match(self, pred, labels, saturation):
-        errors = []
-        for l in labels:
-            dis_min = 1000
-            for p in pred:
-                dis = self.calculate_error(p, l, saturation)
-                if dis < dis_min:
-                    dis_min = dis
-            errors.append(dis_min)
-        return np.mean(errors)
-            
 
     def eval(self, preds, labels):
         metric_dict = {'azimuth': [], 'elevation': []}
@@ -107,8 +65,8 @@ class Gaussian(nn.Module):
             if self.num_source == 1:
                 peak_azimuth, peak_elevation = np.argmax(azimuth, axis=1), np.argmax(elevation, axis=1)
                 peak_azimuth_label, peak_elevation_label = np.argmax(azimuth_label, axis=1), np.argmax(elevation_label, axis=1)
-                azimuth_loss = self.calculate_error(peak_azimuth, peak_azimuth_label, 360)
-                elevation_loss = self.calculate_error(peak_elevation, peak_elevation_label, 180)
+                azimuth_loss = good_error(peak_azimuth, peak_azimuth_label, 360)
+                elevation_loss = good_error(peak_elevation, peak_elevation_label, 180)
             else:
                 azimuth_loss = []; elevation_loss = []
                 for a, e, a_l, e_l in zip(azimuth, elevation, azimuth_label, elevation_label):
@@ -117,8 +75,8 @@ class Gaussian(nn.Module):
                     elevation_peaks = find_peaks(e, height=0.5, distance=10)[0]
                     azimuth_peak_labels = find_peaks(a_l, height=0.5, distance=10)[0]
                     elevation_peak_labels = find_peaks(e_l, height=0.5, distance=10)[0]
-                    match_azimuth = self.best_match(azimuth_peaks, azimuth_peak_labels, 360)
-                    match_elevation = self.best_match(elevation_peaks, elevation_peak_labels, 180)
+                    match_azimuth = minimal_distance(azimuth_peaks, azimuth_peak_labels, 360)
+                    match_elevation = minimal_distance(elevation_peaks, elevation_peak_labels, 180)
  
                     azimuth_loss.append(match_azimuth)
                     elevation_loss.append(match_elevation)
@@ -126,7 +84,6 @@ class Gaussian(nn.Module):
                 elevation_loss = np.mean(elevation_loss)
             metric_dict['azimuth'].append(azimuth_loss)
             metric_dict['elevation'].append(elevation_loss)
-
         metric_dict['azimuth'] = sum(metric_dict['azimuth']) / len(metric_dict['azimuth'])
         metric_dict['elevation'] = sum(metric_dict['elevation']) / len(metric_dict['elevation'])
 

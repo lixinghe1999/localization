@@ -48,7 +48,7 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', type=str, default='TIMIT', choices=['TIMIT', 'ESC50'])
     parser.add_argument('--root', type=str, default='TIMIT', choices=['TIMIT', 'ESC-50-master'])
     parser.add_argument('--method', type=str, default='hrtf', choices=['hrtf', 'ism'])
-    parser.add_argument('--max_source', type=int, default=1)
+    parser.add_argument('--max_source', type=int, default=2)
     parser.add_argument('--min_diff', type=int, default=45)
     parser.add_argument('--num_data', type=int, default=500)
 

@@ -1,13 +1,11 @@
 import torch
 import torch.optim as optim
-from utils.dataset import Main_dataset
-from models.ssl_model import Translate_Model
+from utils.torch_dataset import Main_dataset, Separation_dataset
+from models.sep_model import SEP_Model 
 from tqdm import tqdm
 
 # Define your training loop
-def train(model, train_dataset, test_dataset, optimizer, num_epochs):
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=16, shuffle=True, num_workers=8)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=8, shuffle=False, num_workers=4)
+def train(model, train_loader, test_loader, optimizer, num_epochs):
     save_text = ''
     best_loss = 100
     for epoch in range(num_epochs):
@@ -21,9 +19,9 @@ def train(model, train_dataset, test_dataset, optimizer, num_epochs):
             optimizer.zero_grad()
             outputs = model(binaural)
             label_list.append(labels); output_list.append(outputs)
-            loss = model.classifier.get_loss(outputs, labels)
-            if i % 200 == 0:
-                model.classifier.vis(outputs, labels, epoch, i)
+            loss = model.decoder.get_loss(outputs, labels)
+            # if i % 500 == 0:
+            #     model.classifier.vis(outputs, labels, epoch, i)
             loss.backward()
             optimizer.step()
             loss_sum += loss.item()
@@ -57,15 +55,13 @@ def train(model, train_dataset, test_dataset, optimizer, num_epochs):
     text_file.close()
     json.dump(config, open(save_folder + '/config.json', 'w'), indent=4)
 
-def inference(model, test_dataset):
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=8, shuffle=False, num_workers=4)
+def inference(model, test_loader):
     model.eval()
     label_list, output_list = [], []
     with torch.no_grad():
-        for audio, labels in tqdm(test_loader):
-            audio = {k: v.to(device) for k, v in audio.items()}
-        
-            outputs = model(audio)
+        for binaural, labels in tqdm(test_loader):
+            binaural = {k: v.to(device) for k, v in binaural.items()}
+            outputs = model(binaural)
             label_list.append(labels); output_list.append(outputs)
     eval_dict = model.classifier.eval(output_list, label_list)
     print('test eval', eval_dict)
@@ -74,28 +70,30 @@ if __name__ == '__main__':
     import json
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, default='configs/translate_default.json')
+    parser.add_argument('--config', type=str, default='configs/sep_2.json')
     args = parser.parse_args()
 
     config = json.load(open(args.config, 'r'))
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    train_dataset = Main_dataset(config['train_datafolder'], config)
-    test_dataset = Main_dataset(config['test_datafolder'], config)
+    train_dataset = Separation_dataset(config['train_datafolder'], config)
+    test_dataset = Separation_dataset(config['test_datafolder'], config)
     print('train dataset {}, test dataset {}'.format(len(train_dataset), len(test_dataset)))
     
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=8)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False, num_workers=4)
     # Define your model, loss function, and optimizer
-    model = Translate_Model(backbone_config=config['backbone'], classifier_config=config['classifier']).to(device)
+    model = SEP_Model(backbone_config=config['backbone'], classifier_config=config['classifier']).to(device)
     if config['pretrained']:
         model.pretrained(config['ckpt']) # also freeze
 
     # Train your model
     if config['test_only']:
-        inference(model, test_dataset)
+        inference(model, test_loader)
     else:
         import time
         import os
         optimizer = optim.Adam(model.parameters(), lr=0.0001)
         save_folder = 'ckpts/' + time.strftime("%Y-%m-%d-%H-%M-%S")
         os.makedirs(save_folder, exist_ok=True)
-        train(model, train_dataset, test_dataset, optimizer, num_epochs=10)
+        train(model, train_loader, test_loader, optimizer, num_epochs=config['epochs'])

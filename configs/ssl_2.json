@@ -1,8 +1,8 @@
 {
     "pretrained": false,
     "test_only": false,
-    "train_datafolder": "./simulate/TIMIT/1/ism_TRAIN",
-    "test_datafolder": "./simulate/TIMIT/1/ism_TEST",
+    "train_datafolder": "./simulate/TIMIT/2/hrtf_TRAIN",
+    "test_datafolder": "./simulate/TIMIT/2/hrtf_TEST",
     "ckpt": "",
     "encoding": "Gaussian",
     "duration": 5,
@@ -12,7 +12,7 @@
         "name": "Vanilla",
         "features": {
             "gccphat": {
-                "input_feature": 975,
+                "input_feature": 65,
                 "hidden_feature": 256,
                 "output_feature": 256
             }
@@ -20,7 +20,7 @@
     }, 
     "classifier": 
         {
-        "num_source": 1,
+        "num_source": 2,
         "name": "Gaussian",
         "num_feature": 256,
         "hidden_feature": 512,

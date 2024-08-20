@@ -1,20 +1,25 @@
+'''
+organize the MUSIC DOA algorithm
+'''
+
 import numpy as np
 from scipy.signal import stft
 from pyroomacoustics.doa import MUSIC
 import librosa
 import matplotlib.pyplot as plt
 
-def init_music(mic_center, mic_array, fs, nfft):
+def init_music(mic_array, fs, nfft, mic_center=0):
     kwargs = {'L': mic_center + mic_array,
             'fs': fs, 
             'nfft': nfft,
-            'azimuth': np.deg2rad(np.arange(360)),
+            'azimuth': np.deg2rad(np.arange(180)),
             'num_src': 1
     }
     algo = MUSIC(**kwargs)
     return algo
 
-def inference_music(algo, audio, intervals=None, plot=False):
+def doa(audio, mic_array, fs, nfft, intervals=None, plot=False):
+    algo = init_music(mic_array, fs, nfft, mic_center=0)
     nfft = algo.nfft
     fs = algo.fs
     predictions = []
@@ -39,6 +44,6 @@ def inference_music(algo, audio, intervals=None, plot=False):
     predictions = np.array(predictions)
 
     if plot:
-        plt.savefig('music.png')
+        plt.savefig('doa.png')
         plt.close()
     return predictions, intervals
