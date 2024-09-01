@@ -1,10 +1,13 @@
 '''
-Multi-channel audio may need to extract the features before
+Multi-channel feature
 '''
 import numpy as np
 import librosa
 import noisereduce as nr
 import matplotlib.pyplot as plt
+import os
+import torch
+SPEED_OF_SOUND = 343.2
 
 def gccphat(audio, gcc_phat_len=32):
     N_channel = audio.shape[0]
@@ -35,6 +38,7 @@ def noise_reduce(audio):
     return nr.reduce_noise(y=audio, sr=16000)
 
 
+
 def source_separation(audio, fs, n_fft=512, hop_length=16):
     '''
     reference: https://proceedings.mlr.press/v162/xu22b/xu22b.pdf, 'Learning to Separate Voices by Spatial Regions'
@@ -48,30 +52,63 @@ def source_separation(audio, fs, n_fft=512, hop_length=16):
     freq_bin = np.linspace(0, fs/2, n_fft//2 + 1)[1:, np.newaxis]
     ITD = phase_diff / (2 * np.pi * freq_bin + 1e-6)
     ILD = np.abs(l_stft) / (np.abs(r_stft)+ 1e-6)
-    feature_L = np.concatenate((ITD, ILD), axis=0).astype(np.float32)
-    feature_R = np.concatenate((ITD, ILD), axis=0).astype(np.float32)
-    return {'L': feature_L, 'R': feature_R, 'Binaural': audio}
+    feature= np.concatenate((ITD, ILD), axis=0).astype(np.float32)
+    return {'feature': feature, 'Binaural': audio}
 
-    aliasing_index = np.argmin(np.abs(freq_bin - F_aliasing))
-    print(aliasing_index, fs, F_aliasing)
-    ITD_no_aliasing = ITD[1:aliasing_index]
-    ITD_aliasing = ITD[aliasing_index:]
+def shift_mixture(input_data, target_position, mic_radius, sr, inverse=False):
+    """
+    Shifts the input according to the voice position. This
+    lines up the voice samples in the time domain coming from a target_angle
+    Args:
+        input_data - M x T numpy array or torch tensor
+        target_position - The location where the data should be aligned
+        mic_radius - In meters. The number of mics is inferred from
+            the input_Data
+        sr - Sample Rate in samples/sec
+        inverse - Whether to align or undo a previous alignment
 
-    ILD_no_aliasing = ILD[1:aliasing_index]
-    ILD_aliasing = ILD[aliasing_index:]
+    Returns: shifted data and a list of the shifts
+    """
+    # elevation_angle = 0.0 * np.pi / 180
+    # target_height = 3.0 * np.tan(elevation_angle)
+    # target_position = np.append(target_position, target_height)
 
-    fig, axs = plt.subplots(3, 1, figsize=(10, 10))
-    axs[0].imshow(ITD_no_aliasing, aspect='auto', )
-    axs[1].imshow(ILD_no_aliasing, aspect='auto')
+    num_channels = input_data.shape[0]
 
-    axs[2].hist(ITD_no_aliasing.flatten(), bins=1000)
-    axs[2].set_xlabel('ITD')
-    
-    # fit ITD_no_aliasing with guassian distribution
-    peak = ITD_no_aliasing.mean()
-    std = ITD_no_aliasing.std()
-    print(peak, std)
+    # Must match exactly the generated or captured data
+    mic_array = [[
+        mic_radius * np.cos(2 * np.pi / num_channels * i),
+        mic_radius * np.sin(2 * np.pi / num_channels * i),
+    ] for i in range(num_channels)]
 
-    plt.savefig('figs/source_separation.png')
+    # Mic 0 is the canonical position
+    distance_mic0 = np.linalg.norm(mic_array[0] - target_position)
+    shifts = [0]
+
+    # Check if numpy or torch
+    if isinstance(input_data, np.ndarray):
+        shift_fn = np.roll
+    elif isinstance(input_data, torch.Tensor):
+        shift_fn = torch.roll
+    else:
+        raise TypeError("Unknown input data type: {}".format(type(input_data)))
+
+    # Shift each channel of the mixture to align with mic0
+    for channel_idx in range(1, num_channels):
+        distance = np.linalg.norm(mic_array[channel_idx] - target_position)
+        distance_diff = distance - distance_mic0
+        shift_time = distance_diff / SPEED_OF_SOUND
+        shift_samples = int(round(sr * shift_time))
+        if inverse:
+            input_data[channel_idx] = shift_fn(input_data[channel_idx],
+                                               shift_samples)
+        else:
+            input_data[channel_idx] = shift_fn(input_data[channel_idx],
+                                               -shift_samples)
+        shifts.append(shift_samples)
+
+    return input_data, shifts
+
+
 
     

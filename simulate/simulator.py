@@ -105,6 +105,7 @@ class ISM_simulator():
                            'doa_degree': doa_degree, 'range': ranges, 'file_names': file_names})
         json.dump(labels, f, indent=4)
         f.close()
+
 class HRTF_simulator():
     def __init__(self, HRTF_folder, split):
         self.HRTF_folder = HRTF_folder
@@ -114,11 +115,10 @@ class HRTF_simulator():
         else:
             self.sofas = sofas[40:]
     def simulate(self, HRTF, dataset, max_source, min_diff):
-        num_source = sample(range(1, max_source + 1), 1)[0]
         file_names, signals, IRs,  doa_degree, ranges = [], [], [], [], []
-        for _ in range(num_source):
+        for _ in range(max_source):
             data_index = sample(range(len(dataset)), 1)[0]
-            while 1:
+            while 1: # make sure the doa is not too close
                 m = sample(range(HRTF.Dimensions.M), 1)[0]
                 IR, relative_loc_sph = access_IR(HRTF, m, 0)
                 ok_flag = True
@@ -139,15 +139,10 @@ class HRTF_simulator():
             IRs.append(IR)
             doa_degree.append(relative_loc_sph[0, :2].tolist())
             ranges.append(relative_loc_sph[0, 2:].tolist())
-        max_length = 0
-        for sig in signals:
-            max_length = max(max_length, sig.shape[0])
-        binaural_signal = np.zeros((max_length, 2))
-        for sig in signals:
-            binaural_signal[:sig.shape[0], :] += sig
 
-        binaural_signal = binaural_signal / np.max(np.abs(binaural_signal), axis=0)
-        return file_names, binaural_signal, IRs, doa_degree, ranges
+        # binaural_signal = binaural_signal / np.max(np.abs(binaural_signal), axis=0)
+        # add white noise based on SNR  
+        return file_names, signals, IRs, doa_degree, ranges
 
     def simulate_all(self, save_folder, dataset, num_data_per_user=1000, max_source=1, min_diff=45):
         f = open(save_folder + '/label.json', 'w')
@@ -156,12 +151,13 @@ class HRTF_simulator():
             HRTF_path = os.path.join(self.HRTF_folder, s)
             HRTF = sofa.Database.open(HRTF_path)
             for j in tqdm(range(num_data_per_user)):
-                file_names, binaural_signal, IRs, doa_degree, ranges = self.simulate(HRTF, dataset, max_source, min_diff)
-                out_filename = f"{save_folder}/{i}_{j}"
-                sf.write(out_filename + '.wav', binaural_signal, 16000)
-                # out_filename = f"{save_folder}/{i}_{j}"
-                # np.save(out_filename + '.npy', IRs)
-                labels.append({'fname': os.path.basename(out_filename), 'room_dim': [], 'mic_center': [], 
+                out_folder = f"{save_folder}/{i}_{j}"
+                os.makedirs(out_folder, exist_ok=True)
+                file_names, signals, IRs, doa_degree, ranges = self.simulate(HRTF, dataset, max_source, min_diff)
+                for k, signal in enumerate(signals):
+                    out_filename = f"{out_folder}/{k}.wav"
+                    sf.write(out_filename, signal, 16000)
+                labels.append({'fname': os.path.basename(out_folder), 'room_dim': [], 'mic_center': [], 
                                'doa_degree': doa_degree, 'range': ranges, 'file_names': file_names})   
             HRTF.close()
         json.dump(labels, f, indent=4)

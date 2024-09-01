@@ -3,7 +3,9 @@ simulate/TIMIT
 simulate/ESC-50-master
 dataset/TIMIT
 dataset/ESC-50-master
-figs/
+dataset/STARSS23
+dataset/ssdata_reverb
+lightning_logs/
 ckpts
 *.json
 *.png

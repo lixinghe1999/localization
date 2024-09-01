@@ -45,3 +45,6 @@ def beamforming(audio, mic_array, fs, nfft, azimuth, intervals=None, plot=False)
     plt.close()
     sf.write('output.wav', output, fs)
     return output
+if __name__ == "__main__":
+    from utils.parameter import mic_array_binaural as mic_array
+    simulation(mic_array, 44100, 135)

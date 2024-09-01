@@ -1,7 +1,8 @@
 import torch
 import torch.optim as optim
 from utils.torch_dataset import Main_dataset, Separation_dataset
-from models.sep_model import SEP_Model 
+from models.dprnn import Dual_RNN_model
+from models.utils import beamforming_loss, sisnr, permutation_invaiant_loss
 from tqdm import tqdm
 
 # Define your training loop
@@ -11,38 +12,42 @@ def train(model, train_loader, test_loader, optimizer, num_epochs):
     for epoch in range(num_epochs):
         pbar = tqdm(train_loader)
         loss_sum = 0
-        label_list, output_list = [], []
-
         model.train()
+        _sisnrs = []
         for i, (binaural, labels) in enumerate(pbar):
-            binaural = {k: v.to(device) for k, v in binaural.items()}
             optimizer.zero_grad()
+            binaural = {k: v.to(device) for k, v in binaural.items()}
             outputs = model(binaural)
-            label_list.append(labels); output_list.append(outputs)
-            loss = model.decoder.get_loss(outputs, labels)
-            # if i % 500 == 0:
-            #     model.classifier.vis(outputs, labels, epoch, i)
+            loss = permutation_invaiant_loss(outputs, labels)
             loss.backward()
             optimizer.step()
             loss_sum += loss.item()
-            pbar.set_description(f'Epoch {epoch+1}/{num_epochs}, Loss: {round(loss_sum/(i+1), 3)}')
+            
+            _sisnr = sisnr(outputs.cpu(), labels).mean().item()
+            _sisnrs.append(_sisnr)
+            pbar.set_description(f'Epoch {epoch+1}/{num_epochs}, Loss: {round(loss_sum/(i+1), 3)}, SISNR: {round(_sisnr, 3)}')
+            if i == 0:
+                model.vis(outputs, labels, epoch)
+            break
         train_loss = loss_sum / len(train_loader)
-        eval_dict = model.classifier.eval(output_list, label_list)
-        print('train eval', eval_dict)
-        save_text += f'Epoch {epoch}: Train eval {eval_dict}, '
+        _sisnrs = sum(_sisnrs)/len(_sisnrs)
+        print('train eval', _sisnrs)
+
+        save_text += f'Epoch {epoch}: Train eval {_sisnrs}, '
         model.eval()
-        label_list, output_list = [], []
+        _sisnrs = []
         with torch.no_grad():
             for binaural, labels in (test_loader):
                 binaural = {k: v.to(device) for k, v in binaural.items()}
                 outputs = model(binaural)
-                label_list.append(labels); output_list.append(outputs)
-        eval_dict = model.classifier.eval(output_list, label_list)
-        print('test eval', eval_dict)
-        save_text += f'Test eval {eval_dict}\n'
+                _sisnr = sisnr(outputs.cpu(), labels).mean().item()
+                _sisnrs.append(_sisnr)
+        _sisnrs = sum(_sisnrs)/len(_sisnrs)
+        print('test eval', _sisnrs)
+        save_text += f'Test eval {_sisnrs}\n'
         if train_loss < best_loss:
             best_loss = train_loss
-            best_eval = eval_dict
+            best_eval = _sisnrs
             best_ckpt = model.state_dict()
     print('Best loss:', best_loss)
     print('Best eval:', best_eval)
@@ -80,10 +85,10 @@ if __name__ == '__main__':
     test_dataset = Separation_dataset(config['test_datafolder'], config)
     print('train dataset {}, test dataset {}'.format(len(train_dataset), len(test_dataset)))
     
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=8)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False, num_workers=4)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=1)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False, num_workers=1)
     # Define your model, loss function, and optimizer
-    model = SEP_Model(backbone_config=config['backbone'], classifier_config=config['classifier']).to(device)
+    model = globals()[config['model_name']](**config['model']).to(device)
     if config['pretrained']:
         model.pretrained(config['ckpt']) # also freeze
 

@@ -19,7 +19,7 @@ class TIMIT_dataset(Dataset):
     def __getitem__(self, idx):
         audio = librosa.load(self.data[idx], sr=self.sr)[0]
         # random dBFS from -30 to -10
-        audio = audio / np.max(np.abs(audio)) * 10 ** (np.random.uniform(-35, -15) / 20)
+        # audio = audio / np.max(np.abs(audio)) * 10 ** (np.random.uniform(-35, -15) / 20)
         return audio, self.data[idx]
 class ESC50(Dataset):
     def __init__(self, root='ESC-50-master', split='TRAIN', sr=16000):
@@ -38,7 +38,7 @@ class ESC50(Dataset):
     def __getitem__(self, idx):
         audio = librosa.load(self.data[idx], sr=self.sr)[0]
         # random dBFS from -30 to -10
-        audio = audio / np.max(np.abs(audio)) * 10 ** (np.random.uniform(-35, -15) / 20)
+        # audio = audio / np.max(np.abs(audio)) * 10 ** (np.random.uniform(-35, -15) / 20)
         return audio, self.data[idx]
 
 if __name__ == "__main__":
@@ -47,6 +47,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset', type=str, default='TIMIT', choices=['TIMIT', 'ESC50'])
     parser.add_argument('--root', type=str, default='TIMIT', choices=['TIMIT', 'ESC-50-master'])
+    parser.add_argument('--save_folder', type=str, required=True)
     parser.add_argument('--method', type=str, default='hrtf', choices=['hrtf', 'ism'])
     parser.add_argument('--max_source', type=int, default=2)
     parser.add_argument('--min_diff', type=int, default=45)
@@ -60,7 +61,7 @@ if __name__ == "__main__":
         elif args.dataset == 'ESC50':
             dataset = ESC50(root=args.root, split=split)
 
-        save_folder = args.root + '/{}/hrtf_{}'.format(args.max_source, split)
+        save_folder = args.save_folder + '/{}_{}/{}'.format(args.dataset, args.max_source, split)
         os.makedirs(save_folder, exist_ok=True)
 
         simulator = HRTF_simulator(HRTF_folder, split)

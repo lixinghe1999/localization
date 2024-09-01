@@ -51,31 +51,3 @@ def Cartesian(doas, ranges, config):
         xyz.append([x, y, z])
     xyz = np.array(xyz).astype(np.float32).reshape(-1)
     return xyz
-
-
-
-def region_wise_separation(doas, ranges, file_names, config):
-    number_of_regions = config['classifier']['num_regions']
-    way_of_region = config['classifier']['way_of_region']
-
-    if way_of_region == 'azimuth':
-        regions = np.linspace(config['classifier']['min_azimuth'], config['classifier']['max_azimuth'], number_of_regions + 1)
-    elif way_of_region == 'distance':
-        regions = np.linspace(0, config['classifier']['max_range'], number_of_regions + 1)
-    else:
-        raise NotImplementedError
-    
-    spatial_audio = np.zeros((number_of_regions, 16000 * config['duration']), dtype=np.float32)
-    for doa, range, file_name in zip(doas, ranges, file_names):
-        if way_of_region == 'azimuth':
-            region = np.digitize(doa[0], regions)
-        elif way_of_region == 'distance':
-            region = np.digitize(range, regions)
-        if region == number_of_regions:
-            region = number_of_regions - 1
-
-        mono_audio, _ = librosa.load(os.path.join(config['source_dataset'], file_name), sr=16000, duration=config['duration'])
-        if len(mono_audio) < 16000 * config['duration']:
-            mono_audio = np.pad(mono_audio, (0, 16000 * config['duration'] - len(mono_audio)))
-        spatial_audio[region] += mono_audio.astype(np.float32)
-    return spatial_audio
