@@ -24,18 +24,20 @@ def main(argv):
 
     # use parameter set defined by user
     task_id = '1' if len(argv) < 2 else argv[1]
+    print('task_id : {}'.format(task_id))
     params = parameters.get_params(task_id)
 
     print('\nLoading the best model and predicting results on the testing split')
     print('\tLoading testing dataset:')
     data_gen_test = cls_data_generator.DataGenerator(
-        params=params, split=1, shuffle=False, is_eval=True if params['mode']=='eval' else False
+        params=params, split=3, shuffle=False, is_eval=True if params['mode']=='eval' else False
     )
     data_in, data_out = data_gen_test.get_data_sizes()
     dump_figures = True
 
     # CHOOSE THE MODEL WHOSE OUTPUT YOU WANT TO VISUALIZE 
-    checkpoint_name = "models/1_1_foa_dev_split6_model.h5"
+    # checkpoint_name = "models/1_1_foa_dev_split6_model.h5"
+    checkpoint_name = "models/6_1_dev_split0_multiaccdoa_mic_gcc_model.h5"
     model = seldnet_model.SeldModel(data_in, data_out, params)
     model.eval()
     model.load_state_dict(torch.load(checkpoint_name, map_location=torch.device('cpu')))
@@ -49,7 +51,7 @@ def main(argv):
         for data, target in data_gen_test.generate():
             data, target = torch.tensor(data).to(device).float(), torch.tensor(target).to(device).float()
             output = model(data)
-
+            print('output shape : {}'.format(output.shape), 'target shape : {}'.format(target.shape))
             # (batch, sequence, max_nb_doas*3) to (batch, sequence, 3, max_nb_doas)
             max_nb_doas = output.shape[2]//3
             output = output.view(output.shape[0], output.shape[1], 3, max_nb_doas).transpose(-1, -2)

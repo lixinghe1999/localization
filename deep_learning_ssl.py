@@ -1,9 +1,11 @@
 import torch
 import torch.optim as optim
-from utils.torch_dataset import Main_dataset
+from utils.localization_dataset import STARSS23_dataset
 from models.ssl_model import SSL_Model
+from models.seldnet_model import SeldModel
 from tqdm import tqdm
-
+from utils.window_label import Gaussian_window_evaluation
+import numpy as np
 # Define your training loop
 def train(model, train_loader, test_loader, optimizer, num_epochs):
     save_text = ''
@@ -11,15 +13,11 @@ def train(model, train_loader, test_loader, optimizer, num_epochs):
     for epoch in range(num_epochs):
         pbar = tqdm(train_loader)
         loss_sum = 0
-        label_list, output_list = [], []
-
         model.train()
-        for i, (binaural, labels) in enumerate(pbar):
-            binaural = {k: v.to(device) for k, v in binaural.items()}
+        for i, (data, labels) in enumerate(pbar):
             optimizer.zero_grad()
-            outputs = model(binaural)
-            label_list.append(labels); output_list.append(outputs)
-            loss = model.classifier.get_loss(outputs, labels)
+            outputs = model(data.to(device))
+            loss = torch.nn.functional.mse_loss(outputs, labels.to(device))
             # if i % 500 == 0:
             #     model.classifier.vis(outputs, labels, epoch, i)
             loss.backward()
@@ -27,22 +25,22 @@ def train(model, train_loader, test_loader, optimizer, num_epochs):
             loss_sum += loss.item()
             pbar.set_description(f'Epoch {epoch+1}/{num_epochs}, Loss: {round(loss_sum/(i+1), 3)}')
         train_loss = loss_sum / len(train_loader)
-        eval_dict = model.classifier.eval(output_list, label_list)
-        print('train eval', eval_dict)
-        save_text += f'Epoch {epoch}: Train eval {eval_dict}, '
+        print('train loss', train_loss)
+        save_text += f'Epoch {epoch}: Train loss {train_loss}, '
+        
         model.eval()
-        label_list, output_list = [], []
+        distances = []
         with torch.no_grad():
-            for binaural, labels in (test_loader):
-                binaural = {k: v.to(device) for k, v in binaural.items()}
-                outputs = model(binaural)
-                label_list.append(labels); output_list.append(outputs)
-        eval_dict = model.classifier.eval(output_list, label_list)
-        print('test eval', eval_dict)
-        save_text += f'Test eval {eval_dict}\n'
+            for data, labels in (test_loader):
+                outputs = model(data.to(device))
+                distance = Gaussian_window_evaluation(outputs.cpu().numpy(), labels.cpu().numpy())
+                distances.append(distance)
+        distance = np.concatenate(distances).mean()
+        print('test eval', distance)
+        save_text += f'Test eval {distance}\n'
         if train_loss < best_loss:
             best_loss = train_loss
-            best_eval = eval_dict
+            best_eval = distance
             best_ckpt = model.state_dict()
     print('Best loss:', best_loss)
     print('Best eval:', best_eval)
@@ -70,14 +68,15 @@ if __name__ == '__main__':
     import json
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, default='configs/ssl_2.json')
+    parser.add_argument('--config', type=str, default='configs/starss2023.json')
     args = parser.parse_args()
 
     config = json.load(open(args.config, 'r'))
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(config)
 
-    train_dataset = Main_dataset(config['train_datafolder'], config)
-    test_dataset = Main_dataset(config['test_datafolder'], config)
+    train_dataset = STARSS23_dataset(config['train_datafolder'], config)
+    test_dataset = STARSS23_dataset(config['test_datafolder'], config)
     print('train dataset {}, test dataset {}'.format(len(train_dataset), len(test_dataset)))
     
     train_dataset.feature_folder = 'features/train'
@@ -90,7 +89,8 @@ if __name__ == '__main__':
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=8)
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False, num_workers=4)
     # Define your model, loss function, and optimizer
-    model = SSL_Model(backbone_config=config['backbone'], classifier_config=config['classifier']).to(device)
+    model = SeldModel().to(device)
+    # model = SSL_Model(backbone_config=config['backbone'], classifier_config=config['classifier']).to(device)
     if config['pretrained']:
         model.pretrained(config['ckpt']) # also freeze
 

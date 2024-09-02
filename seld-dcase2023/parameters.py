@@ -8,25 +8,26 @@ def get_params(argv='1'):
     print("SET: {}".format(argv))
     # ########### default parameters ##############
     params = dict(
-        quick_test=True,     # To do quick test. Trains/test on small subset of dataset, and # of epochs
+        quick_test=False,     # To do quick test. Trains/test on small subset of dataset, and # of epochs
     
         finetune_mode = False,  # Finetune on existing model, requires the pretrained model path set - pretrained_model_weights
         pretrained_model_weights='models/1_1_foa_dev_split6_model.h5',
+        # pretrained_model_weights='models/6_1_dev_split0_multiaccdoa_mic_gcc_model.h5',
 
         # INPUT PATH
         # dataset_dir='DCASE2020_SELD_dataset/',  # Base folder containing the foa/mic and metadata folders
-        dataset_dir='/scratch/asignal/partha/DCASE2023/DCASE2023_SELD_dataset',
+        dataset_dir='/home/lixing/localization/dataset/STARSS2023',
 
         # OUTPUT PATHS
         # feat_label_dir='DCASE2020_SELD_dataset/feat_label_hnet/',  # Directory to dump extracted features and labels
-        feat_label_dir='/scratch/asignal/partha/DCASE2023/DCASE2023_SELD_dataset/seld_feat_label',
+        feat_label_dir='/home/lixing/localization/dataset/STARSS2023/seld_feat_label',
  
         model_dir='models/',            # Dumps the trained models and training curves in this folder
         dcase_output_dir='results/',    # recording-wise results are dumped in this path.
 
         # DATASET LOADING PARAMETERS
         mode='dev',         # 'dev' - development or 'eval' - evaluation dataset
-        dataset='foa',       # 'foa' - ambisonic or 'mic' - microphone signals
+        dataset='mic',       # 'foa' - ambisonic or 'mic' - microphone signals
 
         #FEATURE PARAMS
         fs=24000,
@@ -113,6 +114,15 @@ def get_params(argv='1'):
         params['use_salsalite'] = True
         params['multi_accdoa'] = True
 
+    elif argv == '8':
+        print("MIC + GCC + multi ACCDOA evaluation\n")
+        params['quick_test'] = False
+        params['dataset'] = 'mic'
+        params['use_salsalite'] = False
+        params['multi_accdoa'] = True
+        params['mode'] = 'eval'
+
+
     elif argv == '999':
         print("QUICK TEST MODE\n")
         params['quick_test'] = True
@@ -125,7 +135,7 @@ def get_params(argv='1'):
     params['feature_sequence_length'] = params['label_sequence_length'] * feature_label_resolution
     params['t_pool_size'] = [feature_label_resolution, 1, 1]     # CNN time pooling
     params['patience'] = int(params['nb_epochs'])     # Stop training if patience is reached
-
+    
     if '2020' in params['dataset_dir']:
         params['unique_classes'] = 14 
     elif '2021' in params['dataset_dir']:

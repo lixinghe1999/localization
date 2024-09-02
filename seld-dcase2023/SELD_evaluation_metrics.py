@@ -13,7 +13,7 @@
 
 import numpy as np
 
-eps = np.finfo(np.float).eps
+eps = np.finfo(np.float32).eps
 from scipy.optimize import linear_sum_assignment
 from IPython import embed
 

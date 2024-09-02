@@ -1,7 +1,5 @@
-from utils.torch_dataset import Main_dataset, STARSS23_dataset
+from utils.localization_dataset import STARSS23_dataset
 from utils.parameter import mic_array_starss23 as mic_array
-from utils.tdoa import tdoa
-from utils.doa import doa
 import json
 import soundfile as sf
 
@@ -26,9 +24,7 @@ def STARSS23_vis(datasample, class_names):
     plt.savefig('STARSS23.png')
     sf.write('STARSS23.wav', mono_audio, 24000)
 if __name__ == '__main__':
-    # dataset = Main_dataset('simulate/TIMIT/1/hrtf_TEST', config=json.load(open('configs/binaural_TIMIT.json', 'r')))
-    dataset = STARSS23_dataset('dataset/STARSS23', 'dev-test-sony', config=json.load(open('configs/gcc.json', 'r')))
-    
+    dataset = STARSS23_dataset('dataset/STARSS2023', 'dev-test-sony', config=json.load(open('configs/ssl.json', 'r')))    
     datasample = dataset.__getitem__(0)
     STARSS23_vis(datasample, dataset.class_names)
     # print(datasample['audio'].shape, datasample['label'])
