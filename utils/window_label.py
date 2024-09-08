@@ -3,63 +3,156 @@ label for every 0.1s window
 '''
 import numpy as np
 import scipy.signal as signal
-def Gaussian_window(label, config):
+def Gaussian_label(labels, config):
     '''
-    label: {(class_idx, source_idx): {'frame':[0, 1, ...], 'location':(azimuth, elevation, distance)},  (class_idx, source_idx): ...}
+    label: [(frame, class_idx, source_idx, location), ...]
+    Note: no classification at all
     '''
     total_num_frames = config['duration'] * 10
     y = np.arange(config['min_azimuth'], config['max_azimuth'], 1, dtype=float)
     y_window = np.zeros((total_num_frames, y.shape[0]))
-    for _, values in label.items():
-        azimuth = values['location'][0]
-
+    for frame, _, _, azimuth, _, _ in labels:
         y_gaussian = np.exp(-((y - azimuth) ** 2) / (2 * 10 ** 2))
-        for frame in values['frame']:
-            y_window[frame] += y_gaussian
-
-        # for frame in values['frame']:
-        #     y_window[frame][azimuth] = 1
+        y_window[frame] += y_gaussian
     return y_window
 
-def Gaussian_window_evaluation(pred, label, threshold=0.5):
+def ACCDOA_label(labels, config, sed=True):
     '''
-    pred: [batch, time, azimuth]
-    label: [batch, time, azimuth]
+    label: [(frame, class_idx, source_idx, location), ...]
+    config
+    sed: bool, if True, do sed+doa, else doa only
     '''
-    # use threshold to select the peak
-    B, T, A = pred.shape
-    pred = pred.reshape(-1, pred.shape[-1])
-    label = label.reshape(-1, label.shape[-1])
-    
-    pred_peaks = []; label_peaks = []
-    for (p, l) in zip(pred, label):
-        pred_peak, _ = signal.find_peaks(p, height=threshold, distance=10)
-        label_peak, _ = signal.find_peaks(l, height=threshold, distance=10)
+    if not sed:
+        num_class = 1
+    else:
+        num_class = config['num_class']
+    _nb_label_frames = config['duration'] * 10
+    se_label = np.zeros((_nb_label_frames, num_class))
+    x_label = np.zeros((_nb_label_frames, num_class))
+    y_label = np.zeros((_nb_label_frames, num_class))
+    z_label = np.zeros((_nb_label_frames, num_class))
 
-        pred_peaks.append(pred_peak)
-        label_peaks.append(label_peak)
-    # calculate the distance between the peaks
-    min_distances = []
-    for l_peak, p_peak in zip(label_peaks, pred_peaks):
-        if len(l_peak) == 0:
-            min_distances.append(0)
-        else:
-            if len(p_peak) == 0:
-                min_distances.append(180)
-            else:
-                _min_distances = []
-                for l in l_peak:
-                    min_distance = 180
-                    for p in p_peak:
-                        # circular distance calucation, 360 = 0
-                        distance = min(abs(p_peak - l_peak), 360 - abs(p_peak - l_peak))
-                        if distance < min_distance:
-                            min_distance = distance
-                    _min_distances.append(min_distance)
-                min_distances.append(np.mean(_min_distances))
-    min_distances = np.array(min_distances).reshape(B, T)
-    return min_distances
-        
+    for frame, class_idx, _, azimuth, elevation, _  in labels:
+        if not sed:
+            class_idx = 0
+        if frame < _nb_label_frames:
+            x = np.cos(np.radians(azimuth)) * np.cos(np.radians(elevation))
+            y = np.sin(np.radians(azimuth)) * np.cos(np.radians(elevation))
+            z = np.sin(np.radians(elevation))
+
+            se_label[frame, class_idx] = 1
+            x_label[frame, class_idx] = x
+            y_label[frame, class_idx] = y
+            z_label[frame, class_idx] = z
+    label_mat = np.concatenate((se_label, x_label, y_label, z_label), axis=1)
+    return label_mat
+
+def get_adpit_labels_for_file(_desc_file, _nb_label_frames, _nb_unique_classes=13):
+    """
+    Reads description file and returns classification based SED labels and regression based DOA labels
+    for multi-ACCDOA with Auxiliary Duplicating Permutation Invariant Training (ADPIT)
+
+    :param _desc_file: metadata description file
+    :return: label_mat: of dimension [nb_frames, 6, 4(=act+XYZ), max_classes]
+    """
+
+    se_label = np.zeros((_nb_label_frames, 6, _nb_unique_classes))  # [nb_frames, 6, max_classes]
+    x_label = np.zeros((_nb_label_frames, 6, _nb_unique_classes))
+    y_label = np.zeros((_nb_label_frames, 6, _nb_unique_classes))
+    z_label = np.zeros((_nb_label_frames, 6, _nb_unique_classes))
+
+    for frame_ind, active_event_list in _desc_file.items():
+        if frame_ind < _nb_label_frames:
+            active_event_list.sort(key=lambda x: x[0])  # sort for ov from the same class
+            active_event_list_per_class = []
+            for i, active_event in enumerate(active_event_list):
+                active_event_list_per_class.append(active_event)
+                if i == len(active_event_list) - 1:  # if the last
+                    if len(active_event_list_per_class) == 1:  # if no ov from the same class
+                        # a0----
+                        active_event_a0 = active_event_list_per_class[0]
+                        se_label[frame_ind, 0, active_event_a0[0]] = 1
+                        x_label[frame_ind, 0, active_event_a0[0]] = active_event_a0[2]
+                        y_label[frame_ind, 0, active_event_a0[0]] = active_event_a0[3]
+                        z_label[frame_ind, 0, active_event_a0[0]] = active_event_a0[4]
+                    elif len(active_event_list_per_class) == 2:  # if ov with 2 sources from the same class
+                        # --b0--
+                        active_event_b0 = active_event_list_per_class[0]
+                        se_label[frame_ind, 1, active_event_b0[0]] = 1
+                        x_label[frame_ind, 1, active_event_b0[0]] = active_event_b0[2]
+                        y_label[frame_ind, 1, active_event_b0[0]] = active_event_b0[3]
+                        z_label[frame_ind, 1, active_event_b0[0]] = active_event_b0[4]
+                        # --b1--
+                        active_event_b1 = active_event_list_per_class[1]
+                        se_label[frame_ind, 2, active_event_b1[0]] = 1
+                        x_label[frame_ind, 2, active_event_b1[0]] = active_event_b1[2]
+                        y_label[frame_ind, 2, active_event_b1[0]] = active_event_b1[3]
+                        z_label[frame_ind, 2, active_event_b1[0]] = active_event_b1[4]
+                    else:  # if ov with more than 2 sources from the same class
+                        # ----c0
+                        active_event_c0 = active_event_list_per_class[0]
+                        se_label[frame_ind, 3, active_event_c0[0]] = 1
+                        x_label[frame_ind, 3, active_event_c0[0]] = active_event_c0[2]
+                        y_label[frame_ind, 3, active_event_c0[0]] = active_event_c0[3]
+                        z_label[frame_ind, 3, active_event_c0[0]] = active_event_c0[4]
+                        # ----c1
+                        active_event_c1 = active_event_list_per_class[1]
+                        se_label[frame_ind, 4, active_event_c1[0]] = 1
+                        x_label[frame_ind, 4, active_event_c1[0]] = active_event_c1[2]
+                        y_label[frame_ind, 4, active_event_c1[0]] = active_event_c1[3]
+                        z_label[frame_ind, 4, active_event_c1[0]] = active_event_c1[4]
+                        # ----c2
+                        active_event_c2 = active_event_list_per_class[2]
+                        se_label[frame_ind, 5, active_event_c2[0]] = 1
+                        x_label[frame_ind, 5, active_event_c2[0]] = active_event_c2[2]
+                        y_label[frame_ind, 5, active_event_c2[0]] = active_event_c2[3]
+                        z_label[frame_ind, 5, active_event_c2[0]] = active_event_c2[4]
+
+                elif active_event[0] != active_event_list[i + 1][0]:  # if the next is not the same class
+                    if len(active_event_list_per_class) == 1:  # if no ov from the same class
+                        # a0----
+                        active_event_a0 = active_event_list_per_class[0]
+                        se_label[frame_ind, 0, active_event_a0[0]] = 1
+                        x_label[frame_ind, 0, active_event_a0[0]] = active_event_a0[2]
+                        y_label[frame_ind, 0, active_event_a0[0]] = active_event_a0[3]
+                        z_label[frame_ind, 0, active_event_a0[0]] = active_event_a0[4]
+                    elif len(active_event_list_per_class) == 2:  # if ov with 2 sources from the same class
+                        # --b0--
+                        active_event_b0 = active_event_list_per_class[0]
+                        se_label[frame_ind, 1, active_event_b0[0]] = 1
+                        x_label[frame_ind, 1, active_event_b0[0]] = active_event_b0[2]
+                        y_label[frame_ind, 1, active_event_b0[0]] = active_event_b0[3]
+                        z_label[frame_ind, 1, active_event_b0[0]] = active_event_b0[4]
+                        # --b1--
+                        active_event_b1 = active_event_list_per_class[1]
+                        se_label[frame_ind, 2, active_event_b1[0]] = 1
+                        x_label[frame_ind, 2, active_event_b1[0]] = active_event_b1[2]
+                        y_label[frame_ind, 2, active_event_b1[0]] = active_event_b1[3]
+                        z_label[frame_ind, 2, active_event_b1[0]] = active_event_b1[4]
+                    else:  # if ov with more than 2 sources from the same class
+                        # ----c0
+                        active_event_c0 = active_event_list_per_class[0]
+                        se_label[frame_ind, 3, active_event_c0[0]] = 1
+                        x_label[frame_ind, 3, active_event_c0[0]] = active_event_c0[2]
+                        y_label[frame_ind, 3, active_event_c0[0]] = active_event_c0[3]
+                        z_label[frame_ind, 3, active_event_c0[0]] = active_event_c0[4]
+                        # ----c1
+                        active_event_c1 = active_event_list_per_class[1]
+                        se_label[frame_ind, 4, active_event_c1[0]] = 1
+                        x_label[frame_ind, 4, active_event_c1[0]] = active_event_c1[2]
+                        y_label[frame_ind, 4, active_event_c1[0]] = active_event_c1[3]
+                        z_label[frame_ind, 4, active_event_c1[0]] = active_event_c1[4]
+                        # ----c2
+                        active_event_c2 = active_event_list_per_class[2]
+                        se_label[frame_ind, 5, active_event_c2[0]] = 1
+                        x_label[frame_ind, 5, active_event_c2[0]] = active_event_c2[2]
+                        y_label[frame_ind, 5, active_event_c2[0]] = active_event_c2[3]
+                        z_label[frame_ind, 5, active_event_c2[0]] = active_event_c2[4]
+                    active_event_list_per_class = []
+
+    label_mat = np.stack((se_label, x_label, y_label, z_label), axis=2)  # [nb_frames, 6, 4(=act+XYZ), max_classes]
+    return label_mat
+
 
             
 

@@ -1,4 +1,4 @@
-from utils.localization_dataset import STARSS23_dataset
+from utils.public_dataset import STARSS23_dataset, Mobile_dataset
 from utils.parameter import mic_array_starss23 as mic_array
 import json
 import soundfile as sf
@@ -7,8 +7,7 @@ def STARSS23_vis(datasample, class_names):
     import matplotlib.pyplot as plt
     import numpy as np
 
-    audio = datasample['audio']
-    label = datasample['label']
+    audio, label = datasample
     print(audio.shape, label)
     fig, axs = plt.subplots(2, 1, figsize=(10, 10))
     mono_audio = audio[0]
@@ -24,9 +23,14 @@ def STARSS23_vis(datasample, class_names):
     plt.savefig('STARSS23.png')
     sf.write('STARSS23.wav', mono_audio, 24000)
 if __name__ == '__main__':
-    dataset = STARSS23_dataset('dataset/STARSS2023', 'dev-test-sony', config=json.load(open('configs/ssl.json', 'r')))    
-    datasample = dataset.__getitem__(0)
-    STARSS23_vis(datasample, dataset.class_names)
+    # dataset = STARSS23_dataset('dev-test-sony', config=json.load(open('configs/starss23.json', 'r')))    
+    dataset = Mobile_dataset('test', config=json.load(open('configs/ssl.json', 'r')))
+    datasample = dataset.__getitem__(0, encoding=False)
+    for i in range(10):
+        datasample = dataset.__getitem__(i, encoding=False)
+        # STARSS23_vis(datasample, dataset.class_names)
+
+    # STARSS23_vis(datasample, dataset.class_names)
     # print(datasample['audio'].shape, datasample['label'])
 
     # # tdoa(datasample['audio'], plot=True)

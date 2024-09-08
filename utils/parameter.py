@@ -12,7 +12,5 @@ mic_array_seeed = np.c_[
 mic_array_starss23 = np.c_[[np.cos(np.deg2rad(45)), np.sin(np.deg2rad(45)), np.sin(np.deg2rad(35))],
                            [np.cos(np.deg2rad(-45)), np.sin(np.deg2rad(-45)), np.sin(np.deg2rad(-35))],
                             [np.cos(np.deg2rad(135)), np.sin(np.deg2rad(135)), np.sin(np.deg2rad(-35))],
-                            [np.cos(np.deg2rad(-135)), np.sin(np.deg2rad(-135)), np.sin(np.deg2rad(35))]] * 0.942
-
-
+                            [np.cos(np.deg2rad(-135)), np.sin(np.deg2rad(-135)), np.sin(np.deg2rad(35))]] * 0.042
 mic_array_binaural = np.c_[[0.1, 0, 0], [-0.1, 0, 0.0]]

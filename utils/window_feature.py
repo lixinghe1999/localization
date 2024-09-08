@@ -26,7 +26,7 @@ def spectrogram(audio_input):
         spectra.append(stft_ch[:, :_nb_frames])
     return np.array(spectra).T
 
-def get_gcc(linear_spectra):
+def gcc_mel_spec(linear_spectra):
     '''
     input: linear_spectra: (nb_frames, nb_bins, nb_channels)
     '''
@@ -40,4 +40,7 @@ def get_gcc(linear_spectra):
             cc = np.concatenate((cc[:, -_nb_mel_bins//2:], cc[:, :_nb_mel_bins//2]), axis=-1)
             gcc_feat[:, :, cnt] = cc
             cnt += 1
-    return gcc_feat.transpose((2, 0, 1))
+    
+    log_mel_spec = librosa.feature.melspectrogram(S=np.abs(linear_spectra)**2, n_mels=_nb_mel_bins)
+    feat = np.concatenate((log_mel_spec, gcc_feat), axis=-1).transpose(2, 0, 1)
+    return feat

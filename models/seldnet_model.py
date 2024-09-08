@@ -144,9 +144,10 @@ params = dict(
 
         nb_fnn_layers=1,
         fnn_size=128,
-        unique_classes=360,
+        unique_classes = 51,
         t_pool_size=[5, 1, 1])
-batch_size, mic_channels, time_steps, mel_bins = 64, 6, 250, 64
+
+batch_size, mic_channels, time_steps, mel_bins = 64, 10, 250, 64
 target_time_steps = 50
 class SeldModel(torch.nn.Module):
     def __init__(self, in_feat_shape = (batch_size, mic_channels, time_steps, mel_bins), out_shape = (batch_size, target_time_steps, params['unique_classes']),
@@ -174,11 +175,19 @@ class SeldModel(torch.nn.Module):
             self.mhsa_block_list.append(nn.MultiheadAttention(embed_dim=self.params['rnn_size'], num_heads=params['nb_heads'], dropout=params['dropout_rate'],  batch_first=True))
             self.layer_norm_list.append(nn.LayerNorm(self.params['rnn_size']))
 
-        self.fnn_list = torch.nn.ModuleList()
+        self.fnn_list_sed = torch.nn.ModuleList()
         if params['nb_fnn_layers']:
             for fc_cnt in range(params['nb_fnn_layers']):
-                self.fnn_list.append(nn.Linear(params['fnn_size'] if fc_cnt else self.params['rnn_size'], params['fnn_size'], bias=True))
-        self.fnn_list.append(nn.Linear(params['fnn_size'] if params['nb_fnn_layers'] else self.params['rnn_size'], out_shape[-1], bias=True))
+                self.fnn_list_sed.append(nn.Linear(params['fnn_size'] if fc_cnt else self.params['rnn_size'], params['fnn_size'], bias=True))
+        self.fnn_list_sed.append(nn.Linear(params['fnn_size'] if params['nb_fnn_layers'] else self.params['rnn_size'], out_shape[-1], bias=True))
+
+        self.fnn_list_doa = torch.nn.ModuleList()
+        if params['nb_fnn_layers']:
+            for fc_cnt in range(params['nb_fnn_layers']):
+                self.fnn_list_doa.append(nn.Linear(params['fnn_size'] if fc_cnt else self.params['rnn_size'], params['fnn_size'], bias=True))
+        self.fnn_list_doa.append(nn.Linear(params['fnn_size'] if params['nb_fnn_layers'] else self.params['rnn_size'], out_shape[-1]*3, bias=True))
+
+
 
     def forward(self, x):
         """input: (batch_size, mic_channels, time_steps, mel_bins)"""
@@ -200,10 +209,17 @@ class SeldModel(torch.nn.Module):
             x = x + x_attn_in
             x = self.layer_norm_list[mhsa_cnt](x)
 
-        for fnn_cnt in range(len(self.fnn_list) - 1):
-            x = self.fnn_list[fnn_cnt](x)
-        doa = torch.tanh(self.fnn_list[-1](x))
-        return doa
+        sed = x; doa = x
+        for fnn_cnt in range(len(self.fnn_list_doa)):
+            doa = self.fnn_list_doa[fnn_cnt](doa)
+        doa = torch.tanh(doa)
+        # return doa
+        for fnn_cnt in range(len(self.fnn_list_sed)):
+            sed = self.fnn_list_sed[fnn_cnt](sed)
+        sed = torch.sigmoid(sed)
+
+        output = torch.cat((sed, doa), -1)
+        return output
 
 if __name__ == '__main__':
     

@@ -36,14 +36,13 @@ def pra_doa(audio, mic_array, fs, nfft, intervals=None, plot=False):
         data = audio[:, start:end]
         # detect voice activity
         stft_signals = stft(data, fs=fs, nperseg=nfft, noverlap=0, boundary=None)[2]
-
-        M, F, T = stft_signals.shape
-        for T in range(0, T, 10):
-            stft_signal = stft_signals[:, :, T:T+10]
-            algo.locate_sources(stft_signal)
-            predictions.append(np.rad2deg(algo.azimuth_recon[0]))
-        # algo.locate_sources(stft_signals)
-        # predictions.append(np.rad2deg(algo.azimuth_recon[0]))
+        # M, F, T = stft_signals.shape
+        # for T in range(0, T, 10):
+        #     stft_signal = stft_signals[:, :, T:T+10]
+        #     algo.locate_sources(stft_signal)
+        #     predictions.append(np.rad2deg(algo.azimuth_recon[0]))
+        algo.locate_sources(stft_signals)
+        predictions.append(np.rad2deg(algo.azimuth_recon[0]))
     predictions = np.array(predictions)
 
     if plot:
