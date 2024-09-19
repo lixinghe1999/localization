@@ -1,12 +1,12 @@
 import torch
 import torch.optim as optim
 from utils.public_dataset import STARSS23_dataset, Mobile_dataset
-from utils.custom_dataset import Localization_dataset
+from utils.localization_dataset import Localization_dataset
 
 from models.seldnet_model import SeldModel
 from tqdm import tqdm
-from utils.window_evaluation import Gaussian_evaluation, ACCDOA_evaluation
-from utils.window_loss import ACCDOA_loss
+from utils.window_evaluation import Gaussian_evaluation, ACCDOA_evaluation, Multi_ACCDOA_evaluation
+from utils.window_loss import ACCDOA_loss, Multi_ACCDOA_loss
 import numpy as np
 # Define your training loop
 def train(model, train_loader, test_loader, optimizer, num_epochs):
@@ -127,6 +127,9 @@ if __name__ == '__main__':
     if config['encoding'] == 'ACCDOA':
         criterion = ACCDOA_loss
         evaluation = ACCDOA_evaluation
+    if config['encoding'] == 'Multi_ACCDOA':
+        criterion = Multi_ACCDOA_loss
+        evaluation = Multi_ACCDOA_evaluation
 
     if config['pretrained']:
         ckpt = torch.load(config['pretrained'])

@@ -47,6 +47,32 @@ def ACCDOA_label(labels, config, sed=True):
     label_mat = np.concatenate((se_label, x_label, y_label, z_label), axis=1)
     return label_mat
 
+def Multi_ACCDOA_label(labels, config, sed=True):
+    '''
+    label: [(frame, class_idx, source_idx, location), ...]
+    config
+    sed: bool, if True, do sed+doa, else doa only
+    '''
+    num_source = 3
+    _nb_label_frames = config['duration'] * 10
+    se_label = np.zeros((_nb_label_frames, num_source))
+    x_label = np.zeros((_nb_label_frames, num_source))
+    y_label = np.zeros((_nb_label_frames, num_source))
+    z_label = np.zeros((_nb_label_frames, num_source))
+
+    for frame, _, source_idx, azimuth, elevation, _  in labels:
+        if frame < _nb_label_frames:
+            x = np.cos(np.radians(azimuth)) * np.cos(np.radians(elevation))
+            y = np.sin(np.radians(azimuth)) * np.cos(np.radians(elevation))
+            z = np.sin(np.radians(elevation))
+
+            se_label[frame, source_idx] = 1
+            x_label[frame, source_idx] = x
+            y_label[frame, source_idx] = y
+            z_label[frame, source_idx] = z
+    label_mat = np.concatenate((se_label, x_label, y_label, z_label), axis=1)
+    return label_mat
+
 def get_adpit_labels_for_file(_desc_file, _nb_label_frames, _nb_unique_classes=13):
     """
     Reads description file and returns classification based SED labels and regression based DOA labels

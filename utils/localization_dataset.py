@@ -1,5 +1,5 @@
 from torch.utils.data import Dataset
-from .window_label import Gaussian_label, ACCDOA_label
+from .window_label import Gaussian_label, ACCDOA_label, Multi_ACCDOA_label
 from .window_feature import spectrogram, gcc_mel_spec 
 import os
 import librosa
@@ -33,6 +33,8 @@ class Localization_dataset(Dataset):
             self.encoding = Gaussian_label
         elif self.encoding == 'ACCDOA':
             self.encoding = ACCDOA_label
+        elif self.encoding == 'Multi_ACCDOA':
+            self.encoding = Multi_ACCDOA_label
 
         self.root_dir = root_dir
         self.data_folder = os.path.join(self.root_dir, 'audio')
@@ -94,5 +96,3 @@ class Localization_dataset(Dataset):
         else:
             return audio, label
         
-if __name__ == "__main__":
-    print(1)

@@ -16,3 +16,5 @@ ckpts
 *.csv
 *.mp4
 *.png
+*.pt
+*.out

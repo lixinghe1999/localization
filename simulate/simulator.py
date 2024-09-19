@@ -60,14 +60,14 @@ class ISM_simulator():
     def __init__(self) -> None:
         self.fs = 16000 
         self.max_order = 10
-        self.snr_lb, self.snr_ub = 25, 30
+        self.snr_lb, self.snr_ub = 20, 30
         self.offset = 0.5
         self.mic_array =  np.c_[[ 0.08,  0.0, 0.0],
                                 [ -0.08,  0.0, 0.0],
                                 [ 0.08,  -0.1, 0.0],
                                 [ -0.08,  -0.1, 0.0]]
-        # self.room_dims = [[5, 5, 3], [10, 10, 3], [20, 20, 3], [40, 20, 3]]
-        self.room_dims = [[5, 5, 3]]
+        self.room_dims = [[5, 5, 3], [10, 10, 3], [20, 20, 3], [40, 20, 3]]
+        # self.room_dims = [[5, 5, 3]]
     def simulate(self, room_dim, mic_center, dataset, sig_index, min_diff, max_range, out_folder):
         signal, doa_degree, ranges, class_names, active_masks = [], [], [], [], []
         for idx in sig_index:
@@ -77,13 +77,13 @@ class ISM_simulator():
             signal.append(audio)
             class_names.append(class_name)
             while 1:
-                random_doa = uniform(0, 360)
+                random_azimuth = uniform(0, 360)
                 for doa in doa_degree:
-                    diff = np.abs(doa[0] - random_doa)
+                    diff = np.abs(doa[0] - random_azimuth)
                     if diff < min_diff:
                         continue
                 break
-            doa_degree.append([random_doa, 0])
+            doa_degree.append([random_azimuth, 0])
             ranges.append(uniform(0.3, max_range))
 
         room = ShoeBox(room_dim, fs=self.fs, max_order=self.max_order)
@@ -93,11 +93,14 @@ class ISM_simulator():
             azimuth_rad = np.deg2rad(azimuth)
             source_loc = mic_center + np.array([r * np.cos(azimuth_rad), r * np.sin(azimuth_rad), 0])
             room.add_source(source_loc, signal=s)
-        room.simulate()
-        signals = room.mic_array.signals
-        
+        signals = room.simulate(return_premix=True)
+        # print(signals.shape)
+        mixed_signal = np.sum(signals, axis=0)
+        sf.write(out_folder + '.wav', mixed_signal.T, 16000)
+        for i, s in enumerate(signals):
+            os.makedirs(out_folder, exist_ok=True)
+            sf.write(out_folder + '/{}.wav'.format(i), s.T, 16000)
         label = []
-        sf.write(out_folder + '.wav', signals.T, 16000)
         for k in range(len(class_names)):
             active_mask = active_masks[k]
             # convert mask to list of active frames, pick the True index
@@ -105,7 +108,6 @@ class ISM_simulator():
             for frame in active_frames:
                 label.append([frame, class_names[k], k, doa_degree[k][0], doa_degree[k][1], ranges[k]])
         df = pd.DataFrame(label, columns=['frame', 'class', 'source', 'azimuth', 'elevation', 'distance'])
-        # sort by frame
         df = df.sort_values(by=['frame'])
         return df
     
@@ -117,13 +119,15 @@ class ISM_simulator():
 
         if num_data is None:
             num_data = len(dataset) // max_source
+        else: 
+            num_data = len(dataset) // max_source * num_data
         for i in tqdm(range(num_data)):
             room_dim = sample(self.room_dims, 1)[0]
             mic_center = np.array([uniform(0 + self.offset, room_dim[0] - self.offset), 
                                    uniform(0 + self.offset, room_dim[1] - self.offset), uniform(1.5, 1.8)])
             max_range = min(room_dim[0]-mic_center[0], mic_center[0], room_dim[1]-mic_center[1], mic_center[1])
             num_source = sample(range(1, max_source + 1), 1)[0]
-            sig_index = range(i * max_source, i* max_source + num_source)
+            sig_index = sample(range(len(dataset)), num_source)
 
             df = self.simulate(room_dim, mic_center, dataset, sig_index, min_diff, max_range, f"{smartglass_folder}/{i}")
             meta_file = f"{meta_folder}/{i}.csv"

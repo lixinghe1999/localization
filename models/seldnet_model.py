@@ -144,7 +144,7 @@ params = dict(
 
         nb_fnn_layers=1,
         fnn_size=128,
-        unique_classes = 51,
+        unique_classes = 3,
         t_pool_size=[5, 1, 1])
 
 batch_size, mic_channels, time_steps, mel_bins = 64, 10, 250, 64
@@ -175,11 +175,11 @@ class SeldModel(torch.nn.Module):
             self.mhsa_block_list.append(nn.MultiheadAttention(embed_dim=self.params['rnn_size'], num_heads=params['nb_heads'], dropout=params['dropout_rate'],  batch_first=True))
             self.layer_norm_list.append(nn.LayerNorm(self.params['rnn_size']))
 
-        self.fnn_list_sed = torch.nn.ModuleList()
-        if params['nb_fnn_layers']:
-            for fc_cnt in range(params['nb_fnn_layers']):
-                self.fnn_list_sed.append(nn.Linear(params['fnn_size'] if fc_cnt else self.params['rnn_size'], params['fnn_size'], bias=True))
-        self.fnn_list_sed.append(nn.Linear(params['fnn_size'] if params['nb_fnn_layers'] else self.params['rnn_size'], out_shape[-1], bias=True))
+        # self.fnn_list_sed = torch.nn.ModuleList()
+        # if params['nb_fnn_layers']:
+        #     for fc_cnt in range(params['nb_fnn_layers']):
+        #         self.fnn_list_sed.append(nn.Linear(params['fnn_size'] if fc_cnt else self.params['rnn_size'], params['fnn_size'], bias=True))
+        # self.fnn_list_sed.append(nn.Linear(params['fnn_size'] if params['nb_fnn_layers'] else self.params['rnn_size'], out_shape[-1], bias=True))
 
         self.fnn_list_doa = torch.nn.ModuleList()
         if params['nb_fnn_layers']:
@@ -213,13 +213,14 @@ class SeldModel(torch.nn.Module):
         for fnn_cnt in range(len(self.fnn_list_doa)):
             doa = self.fnn_list_doa[fnn_cnt](doa)
         doa = torch.tanh(doa)
+        return doa
         # return doa
-        for fnn_cnt in range(len(self.fnn_list_sed)):
-            sed = self.fnn_list_sed[fnn_cnt](sed)
-        sed = torch.sigmoid(sed)
+        # for fnn_cnt in range(len(self.fnn_list_sed)):
+        #     sed = self.fnn_list_sed[fnn_cnt](sed)
+        # sed = torch.sigmoid(sed)
 
-        output = torch.cat((sed, doa), -1)
-        return output
+        # output = torch.cat((sed, doa), -1)
+        # return output
 
 if __name__ == '__main__':
     

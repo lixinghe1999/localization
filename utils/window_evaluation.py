@@ -1,25 +1,26 @@
 import numpy as np
 from scipy import signal
 import matplotlib.pyplot as plt
-def ACCDOA_evaluation(pred, label, implicit=False, vis=False):
-    def distance_between_cartesian_coordinates(x1, y1, z1, x2, y2, z2):
-        """
-        Angular distance between two cartesian coordinates
-        MORE: https://en.wikipedia.org/wiki/Great-circle_distance
-        Check 'From chord length' section
+import itertools
+def distance_between_cartesian_coordinates(x1, y1, z1, x2, y2, z2):
+    """
+    Angular distance between two cartesian coordinates
+    MORE: https://en.wikipedia.org/wiki/Great-circle_distance
+    Check 'From chord length' section
 
-        :return: angular distance in degrees
-        """
-        # Normalize the Cartesian vectors
-        N1 = np.sqrt(x1**2 + y1**2 + z1**2 + 1e-10)
-        N2 = np.sqrt(x2**2 + y2**2 + z2**2 + 1e-10)
-        x1, y1, z1, x2, y2, z2 = x1/N1, y1/N1, z1/N1, x2/N2, y2/N2, z2/N2
+    :return: angular distance in degrees
+    """
+    # Normalize the Cartesian vectors
+    N1 = np.sqrt(x1**2 + y1**2 + z1**2 + 1e-10)
+    N2 = np.sqrt(x2**2 + y2**2 + z2**2 + 1e-10)
+    x1, y1, z1, x2, y2, z2 = x1/N1, y1/N1, z1/N1, x2/N2, y2/N2, z2/N2
 
-        #Compute the distance
-        dist = x1*x2 + y1*y2 + z1*z2
-        dist = np.clip(dist, -1, 1)
-        dist = np.arccos(dist) * 180 / np.pi
-        return dist
+    #Compute the distance
+    dist = x1*x2 + y1*y2 + z1*z2
+    dist = np.clip(dist, -1, 1)
+    dist = np.arccos(dist) * 180 / np.pi
+    return dist
+def ACCDOA_evaluation(pred, label, implicit=True, vis=False):
     if implicit:
         '''
         pred: [batch, time, n_class * 3 (x, y, z)]
@@ -41,11 +42,9 @@ def ACCDOA_evaluation(pred, label, implicit=False, vis=False):
         pred = pred.reshape(-1, n_class, 4); label = label.reshape(-1, n_class, 4)
         pred_sed = pred[..., 0] > 0.5 # [batch*time, n_class]
         label_sed = label[..., 0] > 0.5 # [batch*time, n_class]
-    
 
     if vis:
-        batch, time = pred.shape[0], pred.shape[1]  
-        fig, axs = plt.subplots(2, 1, figsize=(10, 10))
+        raise NotImplementedError
     else:
         # correct sed prediction: the pred and label are both active
         sed_TP = np.sum(np.logical_and(pred_sed, label_sed))
@@ -81,12 +80,30 @@ def ACCDOA_evaluation(pred, label, implicit=False, vis=False):
             'precision': precision,
             'recall': recall,
             'F1': F1,
-            'distance': np.mean(distances) if len(distances) > 0 else 0,
+            'distance': np.mean(distances) if len(distances) > 0 else 180,
             'sed_precision': sed_precision,
             'sed_recall': sed_recall,
             'sed_F1': sed_F1
         }
 
+def Multi_ACCDOA_evaluation(pred, label, vis=False):
+    '''
+    permutation-aware loss
+    pred: (batch, time, source*3(xyz))
+    labels: (batch, time, source*4(sed+xyz))
+    '''
+    batch, time, N = label.shape
+    num_source = N // 4
+    pred = pred.reshape(-1, num_source, 3); 
+    # compute all possible permutations and use the one with the smallest loss
+    perms = list(itertools.permutations(range(num_source)))
+    best_metric_dict = {'distance': 180, 'precision': 0, 'recall': 0, 'F1': 0, 'sed_precision': 0, 'sed_recall': 0, 'sed_F1': 0}
+    for perm in perms:
+        pred_perm = pred[:, perm].reshape(batch, time, num_source*3)
+        metric_dict = ACCDOA_evaluation(pred_perm, label, vis=False)
+        if metric_dict['distance'] < best_metric_dict['distance']:
+            best_metric_dict = metric_dict
+    return best_metric_dict
 
 def Gaussian_evaluation(pred, label, threshold=0.5, plot=False):
     '''
