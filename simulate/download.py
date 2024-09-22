@@ -20,9 +20,16 @@ def download_segment(args):
     segment_id, video_folder, existing_files = args
     ytid, starttime = segment_id.rsplit('_', 1)
     
-    if ytid + '.mp4' in existing_files:
-        print(f'{ytid} already exists, skipping')
-        return
+    if segment_id + '.mp4' in existing_files:
+        print(f'{ytid} already exists')
+        # check if the video is valid or not
+        video = f'{video_folder}/{segment_id}.mp4'
+        filesize = os.path.getsize(video)
+        print(filesize)
+        if filesize < 1000:
+            print(f'{ytid} is invalid, redownloading')
+        else:
+            return
     
     starttime = int(starttime) / 1000
     endtime = starttime + 10
@@ -32,12 +39,13 @@ def download_segment(args):
     youtube_url = f'https://www.youtube.com/watch?v={ytid}'
     os.system(f'yt-dlp {youtube_url} -P {video_folder} -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" '
               f'-o "{segment_id}.%(ext)s" --download-sections "*{converted_starttime}-{converted_endtime}"')
+
 MODE = 'preprocess' # 'download' or 'process'
+
 if MODE == 'download':
     from multiprocessing import Pool, Manager
     # get the unique segment_id
     unique_segment_id = df['segment_id'].unique()
-
     args = [(segment_id, video_folder, existing_files) for segment_id in unique_segment_id]
     # remove the repea
     # print(args)
@@ -47,51 +55,41 @@ if MODE == 'download':
         with Pool(processes=8) as pool:
             pool.map(download_segment, args)
 elif MODE == 'preprocess': # process the downloaded files
+    count = 0
     for existing_file in existing_files:
-        # existing_file = 's9d-2nhuJCQ_30000.mp4'
+        # existing_file = '0N0C0Wbe6AI_30000.mp4'
         plain_fname = existing_file.split('.')[0]
+        video_file = f'{video_folder}/{existing_file}'
+        video_size = os.path.getsize(video_file)
+        if video_size < 5000:
+            print(f'{plain_fname} is invalid, skipping')
+            continue
+        count += 1
+
         if os.path.exists(f'{audio_folder}/{plain_fname}.flac') and os.path.exists(f'{image_folder}/{plain_fname}.jpg'):
             pass
-            #print(f'{plain_fname} already exists, skipping')
         else:
-            # print(os.path.exists(f'{audio_folder}/{plain_fname}.flac'), os.path.exists(f'{image_folder}/{plain_fname}.jpg'))
-            # continue
-            # try:
             # ffmpeg extract the audio with flac format
             os.system(f'ffmpeg -i {video_folder}/{existing_file} -vn -acodec flac {audio_folder}/{plain_fname}.flac -y')
             # crop the middle image of the video
             os.system(f'ffmpeg -i {video_folder}/{existing_file} -vf "select=eq(n\\,5)" -vsync vfr {image_folder}/{plain_fname}.jpg -y')
-            # except Exception as e:
-            #     print(e)
-            #     # remove the generated audio and image
-            #     os.remove(f'{audio_folder}/{plain_fname}.flac')
-            #     os.remove(f'{image_folder}/{plain_fname}.jpg')
-        # break
+    print(count)
+    # break
 elif MODE == 'embedding':
     # use openai-clip to embed the image and save the embedding
     from PIL import Image
     import torch
     import clip
+    import numpy as np
+    embedding_folder = f'{dataset_folder}/audioset_{split}_strong_embeddings'
+    os.makedirs(embedding_folder, exist_ok=True)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model, preprocess = clip.load("ViT-B/32", device="cuda")
-
-    # image = preprocess(Image.open("CLIP.png")).unsqueeze(0).to(device)
-    # text = clip.tokenize(["a diagram", "a dog", "a cat"]).to(device)
-
-    # with torch.no_grad():
-    #     image_features = model.encode_image(image)
-    #     text_features = model.encode_text(text)
-        
-    #     logits_per_image, logits_per_text = model(image, text)
-    #     probs = logits_per_image.softmax(dim=-1).cpu().numpy()
-
-    for existing_file in existing_files:
+    for existing_file in os.listdir(image_folder):
         plain_fname = existing_file.split('.')[0]
-        image_fname = f'{image_folder}/{plain_fname}.jpg'
-        print(image_fname)
+        image_fname = f'{image_folder}/{existing_file}'
         image = preprocess(Image.open(image_fname)).unsqueeze(0).to(device)
         with torch.no_grad():
             image_features = model.encode_image(image)
-            print(image_features.shape)
-        break
-# print("Label probs:", probs)  # prints: [[0.9927937  0.00421068 0.00299572]]
+        image_features = image_features.cpu().numpy()
+        np.save(f'{embedding_folder}/{plain_fname}.npy', image_features)

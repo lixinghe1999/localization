@@ -2,7 +2,7 @@ from models.audio_models import Sound_Event_Detector
 import torch
 
 if __name__ == "__main__":
-    template_x = torch.randn(2, 32000)
+    template_x = torch.randn(2, 80000)
 
 
     model_name = 'mn10_as'

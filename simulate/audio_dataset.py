@@ -1,11 +1,12 @@
 DHH_sounds = ["Microwave", "Hazard alarm", "Baby crying", "Alarm clock", "Cutlery", "Water running", "Door knock", "Cat Meow", "Dishwasher", 
           "Car horn", "Phone ringing", "Washer/dryer", "Bird chirp", "Vehicle", "Door open/close", "Doorbell", "Dog bark", "Kettle whistle", 
           "Siren", "Cough", "Snore", "Speech"]
-from torch.utils.data import Dataset, ConcatDataset
+from torch.utils.data import Dataset, ConcatDataset, random_split
 import os
 import numpy as np
 import pandas as pd
 import librosa
+from .frame_audio_dataset import AudioSet_dataset
 
 class FSD50K_dataset(Dataset):
     def __init__(self, root='FSD50K', split='eval', sr=16000):
@@ -103,6 +104,16 @@ def dataset_parser(dataset, relative_path):
         root = os.path.join(relative_path, 'FSD50K')
         train_dataset = FSD50K_dataset(root=root, split='dev')
         test_dataset = FSD50K_dataset(root=root, split='eval')
+    elif dataset == 'AudioSet':
+        root = os.path.join(relative_path, 'audioset')
+        dataset = AudioSet_dataset(root=root, split='eval')
+        dataset.filter_modal(['audio', 'embeddings' ])
+
+        # train_dataset = dataset
+        # test_dataset = dataset
+        train_dataset, test_dataset = random_split(dataset, [int(len(dataset)*0.8), len(dataset)-int(len(dataset)*0.8)])
+        train_dataset.class_name = dataset.class_name
+        test_dataset.class_name = dataset.class_name
 
     return train_dataset, test_dataset
 

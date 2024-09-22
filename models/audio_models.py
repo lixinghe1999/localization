@@ -15,8 +15,12 @@ class Sound_Event_Detector(nn.Module):
         self.backbone = Frame_MobileNet(self.backbone)
 
     def forward(self, x, return_fmaps=False):
+        if isinstance(x, list):
+            x, vision = x
+        else:
+            vision = None
         x = self.preprocess(x)
-        x, feature = self.backbone(x.unsqueeze(1), return_fmaps=return_fmaps)
+        x, feature = self.backbone(x.unsqueeze(1), vision, return_fmaps=return_fmaps)
         return x, feature
 
 if __name__ == "__main__":
