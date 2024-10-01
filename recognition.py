@@ -2,18 +2,25 @@
 Audio recognition script
 '''
 import pytorch_lightning as pl
-from simulate.audio_dataset import dataset_parser
 from models.audio_models import Sound_Event_Detector
+from utils.frame_audio_dataset import AudioSet_dataset
+from torch.utils.data import random_split
 import torch
 import torchmetrics
+import os 
 class AudioRecognition(pl.LightningModule):
     def __init__(self, model_name='mn10_as', lr=1e-3):
         super().__init__()
-        # self.train_dataset, self.test_dataset = dataset_parser('ESC50', 'simulate')
-        self.train_dataset, self.test_dataset = dataset_parser('AudioSet', 'dataset')
-        print(len(self.train_dataset), len(self.test_dataset))
+        root = os.path.join('dataset', 'audioset')
+        dataset = AudioSet_dataset(root=root, split='eval', frame_duration=0.1)
+        dataset.filter_modal(['audio', 'embeddings'])
+        self.train_dataset, self.test_dataset = random_split(dataset, [int(len(dataset)*0.8), len(dataset)-int(len(dataset)*0.8)])
+        self.train_dataset.class_name = dataset.class_name
+        self.test_dataset.class_name = dataset.class_name
+
+        print('number of training samples: ', len(self.train_dataset), 'number of testing samples: ', len(self.test_dataset))
         print('number of classes: ', len(self.train_dataset.class_name))
-        self.model = Sound_Event_Detector(model_name, len(self.train_dataset.class_name))
+        self.model = Sound_Event_Detector(model_name, len(self.train_dataset.class_name), frame_duration=0.1)
         self.lr = lr
         self.task = 'multilabel' # ['multilabel', 'multiclass']
         if self.task == 'multiclass':

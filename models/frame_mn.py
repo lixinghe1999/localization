@@ -3,12 +3,12 @@ import torch.nn.functional as F
 
 
 class Frame_MobileNet(torch.nn.Module):
-    def __init__(self, backbone):
+    def __init__(self, backbone, frame_length: int = 50):
         super().__init__()
         # copy all the layers of backbone
         for name, module in backbone.named_children():
             self.add_module(name, module)
-
+        self.frame_length = frame_length
         # self.vision_proj = torch.nn.Sequential(
         #     torch.nn.Linear(512, 128),
         #     torch.nn.ReLU(),
@@ -63,10 +63,10 @@ class Frame_MobileNet(torch.nn.Module):
         else:
             return x, features
     
-    def forward(self, x, vision=None, return_fmaps: bool = False, frame_length: int = 50):
+    def forward(self, x, vision=None, return_fmaps: bool = False, ):
         B, C, Freq, T = x.shape
-        _T = T//frame_length
-        x = x.view(B*_T, 1, Freq, frame_length)
+        _T = T//self.frame_length
+        x = x.view(B*_T, 1, Freq, self.frame_length)
         x, features = self._forward(x, vision, return_fmaps=return_fmaps)
         x = x.view(B, _T, -1)
         features = features.view(B, _T, -1)

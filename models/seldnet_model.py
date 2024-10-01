@@ -149,11 +149,20 @@ params = dict(
 
 batch_size, mic_channels, time_steps, mel_bins = 64, 10, 250, 64
 target_time_steps = 50
+
 class SeldModel(torch.nn.Module):
-    def __init__(self, in_feat_shape = (batch_size, mic_channels, time_steps, mel_bins), out_shape = (batch_size, target_time_steps, params['unique_classes']),
+    def __init__(self, mic_channels=10, unique_classes=9, activation='sigmoid',
                   params=params):
+        '''
+        mic_chanels: 10 - 4mics, 3 - 2mics
+        unique_classes: 9 - 3 classes * 3 axes for fine-grained, 6 - 4+2 (doa + distance)
+        '''
         super().__init__()
-        self.nb_classes = params['unique_classes']
+
+        in_feat_shape = (batch_size, mic_channels, time_steps, mel_bins)
+        out_shape = (batch_size, target_time_steps, unique_classes)
+
+        self.nb_classes = unique_classes
         self.params=params
         self.conv_block_list = nn.ModuleList()
         if len(params['f_pool_size']):
@@ -185,10 +194,15 @@ class SeldModel(torch.nn.Module):
         if params['nb_fnn_layers']:
             for fc_cnt in range(params['nb_fnn_layers']):
                 self.fnn_list_doa.append(nn.Linear(params['fnn_size'] if fc_cnt else self.params['rnn_size'], params['fnn_size'], bias=True))
-        self.fnn_list_doa.append(nn.Linear(params['fnn_size'] if params['nb_fnn_layers'] else self.params['rnn_size'], out_shape[-1]*3, bias=True))
+        self.fnn_list_doa.append(nn.Linear(params['fnn_size'] if params['nb_fnn_layers'] else self.params['rnn_size'], out_shape[-1], bias=True))
 
 
-
+        if activation == 'sigmoid':
+            self.activation = nn.Sigmoid()
+        elif activation == 'tanh':
+            self.activation = nn.Tanh()
+        else:
+            self.activation = nn.Identity()
     def forward(self, x):
         """input: (batch_size, mic_channels, time_steps, mel_bins)"""
         for conv_cnt in range(len(self.conv_block_list)):
@@ -209,10 +223,11 @@ class SeldModel(torch.nn.Module):
             x = x + x_attn_in
             x = self.layer_norm_list[mhsa_cnt](x)
 
-        sed = x; doa = x
+        doa = x
         for fnn_cnt in range(len(self.fnn_list_doa)):
             doa = self.fnn_list_doa[fnn_cnt](doa)
-        doa = torch.tanh(doa)
+
+        doa = self.activation(doa)
         return doa
         # return doa
         # for fnn_cnt in range(len(self.fnn_list_sed)):

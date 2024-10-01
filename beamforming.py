@@ -2,12 +2,11 @@
 from torch import optim
 from pytorch_lightning import Trainer
 # We train the same model architecture that we used for inference above.
-from utils.variable_source_loss import singlesrc_neg_sisdr
 
 from models.deepbeam import BeamformerModel
 
 # In this example we use Permutation Invariant Training (PIT) and the SI-SDR loss.
-from asteroid.losses import pairwise_neg_sisdr, PITLossWrapper
+from asteroid.losses import pairwise_neg_sisdr, PITLossWrapper, singlesrc_neg_sdsdr
 from asteroid.engine import System
 # This will automatically download MiniLibriMix from Zenodo on the first run.
 from utils.separation_dataset import Separation_dataset, FUSSDataset
@@ -39,7 +38,7 @@ if __name__ == '__main__':
     #loss = PITLossWrapper(pairwise_neg_sisdr, pit_from="pw_mtx")
     # loss = PITLossWrapper(PairwiseNegSDR_active("sisdr"), pit_from="pw_mtx") 
     # loss = torch.nn.functional.l1_loss
-    loss = singlesrc_neg_sisdr
+    loss = singlesrc_neg_sdsdr
 
 
     optimizer = optim.Adam(model.parameters(), lr=1e-3)

@@ -7,12 +7,13 @@ import torch.nn as nn
 import torch
 
 class Sound_Event_Detector(nn.Module):
-    def __init__(self, model_name = 'mn10_as', num_classes=527):
+    def __init__(self, model_name = 'mn10_as', num_classes=527, frame_duration=1):
         super().__init__()
         self.preprocess = AugmentMelSTFT()
         self.backbone = get_mobilenet_model(num_classes=num_classes, pretrained_name=model_name, width_mult=NAME_TO_WIDTH(model_name), 
                                          strides=[2, 2, 2, 2], head_type='mlp')
-        self.backbone = Frame_MobileNet(self.backbone)
+        frame_length = int(50 * frame_duration)
+        self.backbone = Frame_MobileNet(self.backbone, frame_length)
 
     def forward(self, x, return_fmaps=False):
         if isinstance(x, list):

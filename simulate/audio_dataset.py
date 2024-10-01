@@ -6,7 +6,6 @@ import os
 import numpy as np
 import pandas as pd
 import librosa
-from .frame_audio_dataset import AudioSet_dataset
 
 class FSD50K_dataset(Dataset):
     def __init__(self, root='FSD50K', split='eval', sr=16000):
@@ -89,8 +88,42 @@ class ESC50(Dataset):
         audio = librosa.load(file_name, sr=self.sr)[0]
         class_idx = int(file_name[:-4].split('-')[-1])
         return audio, class_idx
+class FUSS_Reverb(Dataset):
+    def __init__(self, root='FUSS_reverb', split='TRAIN', sr=16000):
+        root = os.path.join(root, split)
+        self.data = []
+        self.sr = sr
+        audio_list = os.listdir(root)
+        audio_list = [audio for audio in audio_list if audio.endswith('sources')]
 
+        self.data = []; self.annotation = []
+        for audio in audio_list:
+            source_dir = os.path.join(root, audio)
+            source_list = os.listdir(source_dir)
+            source_list = [source for source in source_list if source.startswith('foreground')]
 
+            example_name = audio.split('_')[0]
+            active_txt = example_name + '.txt'
+            active_txt = os.path.join(root, active_txt)
+            with open(active_txt, 'r') as f:
+                lines = f.readlines()
+
+            for i, source in enumerate(source_list):
+                if source.startswith('foreground'):
+                    self.data.append(os.path.join(source_dir, source))
+                    self.annotation.append(lines[i].strip())
+
+        print(len(self.data), len(self.annotation))
+    def __len__(self):
+        return len(self.data)
+    def __getitem__(self, idx):
+        file_name = self.data[idx]
+        annotation = self.annotation[idx]
+        start, end, _ = annotation.split()
+        start, end = float(start), float(end)
+
+        audio = librosa.load(file_name, sr=self.sr)[0]
+        return audio, 0, (start, end)
 def dataset_parser(dataset, relative_path):
     if dataset == 'TIMIT':
         root = os.path.join(relative_path, 'TIMIT')
@@ -104,19 +137,13 @@ def dataset_parser(dataset, relative_path):
         root = os.path.join(relative_path, 'FSD50K')
         train_dataset = FSD50K_dataset(root=root, split='dev')
         test_dataset = FSD50K_dataset(root=root, split='eval')
-    elif dataset == 'AudioSet':
-        root = os.path.join(relative_path, 'audioset')
-        dataset = AudioSet_dataset(root=root, split='eval')
-        dataset.filter_modal(['audio', 'embeddings' ])
-
-        # train_dataset = dataset
-        # test_dataset = dataset
-        train_dataset, test_dataset = random_split(dataset, [int(len(dataset)*0.8), len(dataset)-int(len(dataset)*0.8)])
-        train_dataset.class_name = dataset.class_name
-        test_dataset.class_name = dataset.class_name
-
+    elif dataset == 'FUSS_Reverb':
+        root = os.path.join(relative_path, 'ssdata_reverb')
+        train_dataset = FUSS_Reverb(root=root, split='train')
+        test_dataset = FUSS_Reverb(root=root, split='eval')
     return train_dataset, test_dataset
 
 if __name__ == '__main__':
-    train_dataset, test_dataset = dataset_parser('ESC50')
-    print(len(train_dataset), len(test_dataset))
+    train_dataset, test_dataset = dataset_parser('FUSS_Reverb', '.')
+
+    data = train_dataset[0]

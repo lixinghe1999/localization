@@ -1,9 +1,10 @@
 simulate/HRTF-Database
 simulate/TIMIT
 simulate/ESC-50-master
+simulate/ssdata_reverb
 dataset/
 lightning_logs/
-seld-dcase2023/
+cache/
 ckpts
 *.json
 *.png

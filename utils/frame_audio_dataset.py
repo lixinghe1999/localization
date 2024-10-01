@@ -10,7 +10,7 @@ from PIL import Image
 import json
 
 class AudioSet_dataset(Dataset):
-    def __init__(self, root='audioset', split='eval', sr=16000, duration=10):
+    def __init__(self, root='audioset', split='eval', sr=16000, duration=10, frame_duration=0.5):
         self.image_dir = os.path.join(root, 'audioset_{}_strong_images'.format(split))
         self.audio_dir = os.path.join(root, 'audioset_{}_strong_audios'.format(split))
         self.embeddings_dir = os.path.join(root, 'audioset_{}_strong_embeddings'.format(split))
@@ -38,13 +38,14 @@ class AudioSet_dataset(Dataset):
         self.duration = duration
         # clip-level
         self.clip_labels = []; self.frame_labels = []
+        self.num_frames_per_clip = int(duration / frame_duration)
         for segment_id in labels:
             clip_label = np.zeros(self.num_classes, dtype=np.float32)
-            frame_label = np.zeros((self.duration, self.num_classes), dtype=np.float32)
+            frame_label = np.zeros((self.num_frames_per_clip, self.num_classes), dtype=np.float32)
             for start, end, label in labels[segment_id]:
                 clip_label[self.label_map[label]] = 1
-                start_frame = int(start)
-                end_frame = int(end)
+                start_frame = int(start/ frame_duration)
+                end_frame = int(end/ frame_duration)
                 frame_label[start_frame:end_frame, self.label_map[label]] = 1
             self.frame_labels.append([segment_id, frame_label])
             self.clip_labels.append([segment_id, clip_label])
@@ -67,7 +68,6 @@ class AudioSet_dataset(Dataset):
         self.clip_labels = [self.clip_labels[i] for i in keep_index]
         self.frame_labels = [self.frame_labels[i] for i in keep_index]
         
-
     def __len__(self):
         return len(self.clip_labels)
 

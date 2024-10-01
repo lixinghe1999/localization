@@ -4,7 +4,7 @@ import librosa
 import soundfile as sf
 
 dataset_folder = '../dataset/audioset'
-split = 'eval'
+split = 'train'
 tsv = f'{dataset_folder}/audioset_{split}_strong.tsv'
 video_folder = f'{dataset_folder}/audioset_{split}_strong'
 image_folder = f'{dataset_folder}/audioset_{split}_strong_images'
@@ -40,7 +40,7 @@ def download_segment(args):
     os.system(f'yt-dlp {youtube_url} -P {video_folder} -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" '
               f'-o "{segment_id}.%(ext)s" --download-sections "*{converted_starttime}-{converted_endtime}"')
 
-MODE = 'preprocess' # 'download' or 'process'
+MODE = 'embedding' # 'download' or 'process'
 
 if MODE == 'download':
     from multiprocessing import Pool, Manager

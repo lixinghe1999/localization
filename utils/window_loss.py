@@ -1,5 +1,13 @@
 import torch
 import itertools
+def Region_loss(pred, labels):
+    '''
+    pred: (batch, time, nb_class (azimuth + distance))
+    labels: (batch, time, nb_class (azimuth + distance))
+    '''
+    loss = torch.nn.functional.binary_cross_entropy(pred, labels)
+    return loss
+
 def ACCDOA_loss(pred, labels, implicit=True):
     if implicit:
         '''

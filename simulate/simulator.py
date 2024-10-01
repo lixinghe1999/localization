@@ -56,6 +56,18 @@ def active_frame(audio, frame=0.1, sr=16000):
     mask = energy > 0.1
     return audio, mask
 
+
+def random_room(num_room=100, sr=16000):
+    rooms = []
+    for _ in range(num_room):
+        width = uniform(3, 20)
+        length = uniform(3, 20)
+        height = uniform(2, 10)
+        room_dim = [width, length, height]
+        absorption = np.random.uniform(low=0.1, high=0.99)
+        rooms.append([room_dim, absorption])
+    return rooms
+
 class ISM_simulator():
     def __init__(self) -> None:
         self.fs = 16000 
@@ -65,17 +77,27 @@ class ISM_simulator():
         self.mic_array =  np.c_[[ 0.08,  0.0, 0.0],
                                 [ -0.08,  0.0, 0.0],
                                 [ 0.08,  -0.1, 0.0],
-                                [ -0.08,  -0.1, 0.0]]
-        self.room_dims = [[5, 5, 3], [10, 10, 3], [20, 20, 3], [40, 20, 3]]
-        # self.room_dims = [[5, 5, 3]]
-    def simulate(self, room_dim, mic_center, dataset, sig_index, min_diff, max_range, out_folder):
+                                [ -0.08,  -0.1, 0.0],
+                                [0.0, 0.0, 0.0]]
+        self.room_dims = random_room()
+
+    def simulate(self, room, mic_center, dataset, sig_index, min_diff, max_range, out_folder):
         signal, doa_degree, ranges, class_names, active_masks = [], [], [], [], []
         for idx in sig_index:
-            audio, class_name = dataset[idx]
-            audio, active_mask = active_frame(audio)
+            audio, class_name, (start, end) = dataset[idx]
+
+            if start is None or end is None:
+                audio, active_mask = active_frame(audio, frame=0.1)
+            else:
+                frame_number = int(len(audio) / self.fs / 0.1)
+                active_mask = np.zeros(frame_number)
+                start_frame = int(start / 0.1)
+                end_frame = int(end / 0.1)
+                active_mask[start_frame:end_frame] = 1
             active_masks.append(active_mask)
             signal.append(audio)
             class_names.append(class_name)
+
             while 1:
                 random_azimuth = uniform(0, 360)
                 for doa in doa_degree:
@@ -86,15 +108,13 @@ class ISM_simulator():
             doa_degree.append([random_azimuth, 0])
             ranges.append(uniform(0.3, max_range))
 
-        room = ShoeBox(room_dim, fs=self.fs, max_order=self.max_order)
         assert len(doa_degree) == len(ranges)
-        room.add_microphone_array(mic_center[:, np.newaxis] + self.mic_array)
         for (azimuth, elevation), r, s in zip(doa_degree, ranges, signal):
             azimuth_rad = np.deg2rad(azimuth)
             source_loc = mic_center + np.array([r * np.cos(azimuth_rad), r * np.sin(azimuth_rad), 0])
             room.add_source(source_loc, signal=s)
         signals = room.simulate(return_premix=True)
-        # print(signals.shape)
+
         mixed_signal = np.sum(signals, axis=0)
         sf.write(out_folder + '.wav', mixed_signal.T, 16000)
         for i, s in enumerate(signals):
@@ -120,16 +140,21 @@ class ISM_simulator():
         if num_data is None:
             num_data = len(dataset) // max_source
         else: 
-            num_data = len(dataset) // max_source * num_data
+            num_data = num_data
         for i in tqdm(range(num_data)):
-            room_dim = sample(self.room_dims, 1)[0]
+            room_dim, absorption = sample(self.room_dims, 1)[0]
+            room = ShoeBox(room_dim, fs=self.fs, max_order=10, absorption=absorption)
+
             mic_center = np.array([uniform(0 + self.offset, room_dim[0] - self.offset), 
                                    uniform(0 + self.offset, room_dim[1] - self.offset), uniform(1.5, 1.8)])
+            room.add_microphone_array(mic_center[:, np.newaxis] + self.mic_array)
+
             max_range = min(room_dim[0]-mic_center[0], mic_center[0], room_dim[1]-mic_center[1], mic_center[1])
             num_source = sample(range(1, max_source + 1), 1)[0]
             sig_index = sample(range(len(dataset)), num_source)
+            
 
-            df = self.simulate(room_dim, mic_center, dataset, sig_index, min_diff, max_range, f"{smartglass_folder}/{i}")
+            df = self.simulate(room, mic_center, dataset, sig_index, min_diff, max_range, f"{smartglass_folder}/{i}")
             meta_file = f"{meta_folder}/{i}.csv"
             df.to_csv(meta_file, index=False)
             
@@ -167,12 +192,6 @@ class HRTF_simulator():
                 
             audio, class_name = dataset[data_index]
             audio, active_mask = active_frame(audio)
-
-            # active_mask_vis = np.repeat(active_mask, len(audio) // len(active_mask))
-            # plt.plot(audio)
-            # plt.plot(active_mask_vis)
-            # plt.savefig('active.png')
-            # plt.close()
 
             class_names.append(class_name)
             left = signal.convolve(audio, IR[0])
@@ -220,6 +239,8 @@ class HRTF_simulator():
             HRTF_path = os.path.join(self.HRTF_folder, s)
             HRTF = sofa.Database.open(HRTF_path)
             out_folder_list = []
+            num_data_per_user = HRTF.Dimensions.M if num_data_per_user is None else num_data_per_user
+            print(f"Processing {i} with {num_data_per_user} data per user)")
             for j in range(num_data_per_user):
                 out_folder = f"{binaural_folder}/{i}_{j}"
                 out_folder_list.append(out_folder)

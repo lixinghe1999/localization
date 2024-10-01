@@ -26,6 +26,16 @@ def spectrogram(audio_input):
         spectra.append(stft_ch[:, :_nb_frames])
     return np.array(spectra).T
 
+def binaural_spc(linear_spectra):
+    # first feature: sin and cos of the phase difference
+    phase_diff = np.angle(linear_spectra[:, :, 0]) - np.angle(linear_spectra[:, :, 1])
+    sin_phase_diff = np.sin(phase_diff)
+    cos_phase_diff = np.cos(phase_diff)
+    # second feature: interaural-level-difference
+    ild = 10 * np.log10(np.abs(linear_spectra[:, :, 0]) / np.abs(linear_spectra[:, :, 1]))
+    
+
+
 def gcc_mel_spec(linear_spectra):
     '''
     input: linear_spectra: (nb_frames, nb_bins, nb_channels)

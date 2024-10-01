@@ -65,34 +65,6 @@ def train(model, train_loader, test_loader, optimizer, num_epochs):
     text_file.close()
     json.dump(config, open(save_folder + '/config.json', 'w'), indent=4)
 
-def inference(model, test_loader):
-    import matplotlib.pyplot as plt
-    model.eval()
-    distances = []
-    with torch.no_grad():
-        for i, (data, labels) in enumerate(tqdm(test_loader)):
-            outputs = model(data.to(device))
-            outputs = outputs.cpu().numpy()
-            labels = labels.cpu().numpy()
-            distance, pred_peaks, label_peaks = Gaussian_window_evaluation(outputs, labels, plot=True)
-            distances.append(distance)
-            if i % 100 == 0:
-                B = outputs.shape[0]
-                T = outputs.shape[1]
-                fig, axs = plt.subplots(B, 1)
-                for b in range(B):
-                    for t in range(T):
-                        idx = b * T + t
-                        pred_peak = pred_peaks[idx]; label_peak = label_peaks[idx]
-                        axs[b].scatter([t] * len(pred_peak), pred_peak, c='r')
-                        axs[b].scatter([t] * len(label_peak), label_peak, c='b')
-                    axs[b].set_ylim(0, 360)
-                plt.savefig('figs/visualization_{}.png'.format(i))
-                plt.close()
-            # break
-    distances = np.concatenate(distances).mean()
-    print('test eval', distances)
-    return distances
 if __name__ == '__main__':
     import json
     import argparse
@@ -104,26 +76,27 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(config)
 
-    if config['dataset'] == 'starss23':
-        train_dataset = STARSS23_dataset(config['train_datafolder'], config)
-        test_dataset = STARSS23_dataset(config['test_datafolder'], config)
-    elif config['dataset'] == 'mobile':
+    if config['dataset'] == 'mobile':
         train_dataset = Mobile_dataset(config['train_datafolder'], config)
         test_dataset = Mobile_dataset(config['test_datafolder'], config)
     elif config['dataset'] in ['earphone', 'smartglass']:
         train_dataset = Localization_dataset(config['train_datafolder'], config)
         test_dataset = Localization_dataset(config['test_datafolder'], config)
 
-    # test_dataset.__baseline__()
+    # train_dataset._cache_('cache/train')
+    # test_dataset._cache_('cache/test')
+    train_dataset.cache_folder = 'cache/train'
+    test_dataset.cache_folder = 'cache/test'
 
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=8)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False, num_workers=8)
+
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=4)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False, num_workers=4)
     # Define your model, loss function, and optimizer
     if config['model']['name'] == 'seldnet':
-        model = SeldModel().to(device)
+        model = SeldModel(mic_channels=config['num_channel'], unique_classes=3).to(device)
     else:
         raise NotImplementedError
-    
+
     if config['encoding'] == 'ACCDOA':
         criterion = ACCDOA_loss
         evaluation = ACCDOA_evaluation
@@ -138,7 +111,7 @@ if __name__ == '__main__':
 
     # Train your model
     if config['test_only']:
-        inference(model, test_loader)
+        raise NotImplementedError
     else:
         import time
         import os
