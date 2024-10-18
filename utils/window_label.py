@@ -34,22 +34,23 @@ def doa2idx(azimuth, elevation):
             return 5
         
 def dist2idx(distance):
-    if distance <= 1:
+    if distance <= 1.5:
         return 0
-    elif distance <= 2:
-        return 1
     else:
-        return 2
+        return 1
 
 def Region_label(labels, config):
     total_num_frames = config['duration'] * 10
-    label_window = np.zeros((total_num_frames, 9))
-    for frame, _, _, azimuth, elevation, distance in labels:
+    num_class = config['num_class']
+
+    label_window = np.zeros((total_num_frames, 8 + num_class))
+    for frame, class_idx, _, azimuth, elevation, distance in labels:
         doa_idx = doa2idx(azimuth, elevation)
         label_window[int(frame), doa_idx] = 1
 
         dist_idx = dist2idx(distance)
         label_window[int(frame), 6 + dist_idx] = 1
+        label_window[int(frame), 8 + int(class_idx)] = 1
     return label_window
 
 

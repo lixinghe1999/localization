@@ -8,9 +8,11 @@ import pandas as pd
 import librosa
 from PIL import Image
 import json
+ 
+
 
 class AudioSet_dataset(Dataset):
-    def __init__(self, root='audioset', split='eval', sr=16000, duration=10, frame_duration=0.5):
+    def __init__(self, root='audioset', vision=True, split='eval', sr=16000, duration=10, frame_duration=1, label_level='clip'):
         self.image_dir = os.path.join(root, 'audioset_{}_strong_images'.format(split))
         self.audio_dir = os.path.join(root, 'audioset_{}_strong_audios'.format(split))
         self.embeddings_dir = os.path.join(root, 'audioset_{}_strong_embeddings'.format(split))
@@ -18,38 +20,46 @@ class AudioSet_dataset(Dataset):
 
         label = pd.read_csv(label_file, sep='\t')
         labels = {}
-        self.label_map = {}; self.class_name = []
+        self.label_map = {}
         for row in label.itertuples():
             segment_id = row.segment_id 
             if row.label not in self.label_map:
                 self.label_map[row.label] = len(self.label_map)
-                self.class_name.append(row.label)
             if segment_id not in labels:
                 labels[segment_id] = []
             labels[segment_id].append([row.start_time_seconds, row.end_time_seconds, row.label])
         self.num_classes = len(self.label_map)
         print('Number of classes:', self.num_classes)
-        ontology = json.load(open(os.path.join(root, 'ontology.json')))
+
+        ontology = pd.read_csv(os.path.join(root, 'mid_to_display_name.tsv'), sep='\t', names=['mid', 'display_name'])
         self.ontology = {}
-        for item in ontology:
-            self.ontology[item['id']] = item['name']
+        for row in ontology.itertuples():
+            self.ontology[row.mid] = row.display_name
+        self.class_map = ['unknown'] * self.num_classes
+        for k in self.label_map:
+            cls_idx = self.label_map[k]
+            if k in self.ontology:
+                self.class_map[cls_idx] = self.ontology[k]
 
         self.sr = sr
         self.duration = duration
+        self.frame_duration = frame_duration
+        self.vision = vision
+        self.label_level = label_level
+
         # clip-level
         self.clip_labels = []; self.frame_labels = []
-        self.num_frames_per_clip = int(duration / frame_duration)
+        self.num_frames_per_clip = int(duration / self.frame_duration)
         for segment_id in labels:
             clip_label = np.zeros(self.num_classes, dtype=np.float32)
             frame_label = np.zeros((self.num_frames_per_clip, self.num_classes), dtype=np.float32)
             for start, end, label in labels[segment_id]:
                 clip_label[self.label_map[label]] = 1
-                start_frame = int(start/ frame_duration)
-                end_frame = int(end/ frame_duration)
+                start_frame = int(start/ self.frame_duration)
+                end_frame = int(end/ self.frame_duration)
                 frame_label[start_frame:end_frame, self.label_map[label]] = 1
             self.frame_labels.append([segment_id, frame_label])
             self.clip_labels.append([segment_id, clip_label])
-
     def filter_modal(self, modal):
         keep_index = []
         for i in range(self.__len__()):
@@ -72,8 +82,10 @@ class AudioSet_dataset(Dataset):
         return len(self.clip_labels)
 
     def __getitem__(self, idx): 
-        segment_id, label = self.frame_labels[idx]
-        _, clip_label = self.clip_labels[idx]
+        if self.label_level  == 'frame':
+            segment_id, label = self.frame_labels[idx]
+        else:
+            segment_id, label = self.clip_labels[idx]
 
         audio_file = os.path.join(self.audio_dir, segment_id + '.flac')
         # duration = librosa.get_duration(path=audio_file)
@@ -82,37 +94,41 @@ class AudioSet_dataset(Dataset):
             audio = np.pad(audio, (0, self.duration*self.sr - len(audio)))
         else:
             audio = audio[:self.duration*self.sr]
+        if self.vision:
+            # image_file = os.path.join(self.image_dir, segment_id + '.jpg')
+            embeddings_file = os.path.join(self.embeddings_dir, segment_id + '.npy')
 
-        # image_file = os.path.join(self.image_dir, segment_id + '.jpg')
-        embeddings_file = os.path.join(self.embeddings_dir, segment_id + '.npy')
+            # image = np.array(Image.open(image_file))
+            image = np.load(embeddings_file).astype(np.float32)
 
-        # image = np.array(Image.open(image_file))
-        image = np.load(embeddings_file).astype(np.float32)
+            return (audio, image), label
+        else:
+            return audio, label
 
-        return (audio, image), label
+def dataset_sample(dataset):
+    home_label = ["/m/06h7j", "/m/07qv_x_", "/m/07pbtc8", "/m/03cczk", "/m/0l15bq", "/m/053hz1", "/m/03qtwd", "/t/dd00013", "/t/dd00135"]
+    home_label += ["/m/0bt9lr", "/m/01yrx"]
+    count = 0
+    for clip_label in dataset.clip_labels:
+        segment_id, label = clip_label
+        num_class = sum(label)
+        # print('Segment id:', segment_id, label.shape, 'Number of classes:', num_class)
+        if num_class == 1:
+            # audio_file = os.path.join(dataset.audio_dir, segment_id + '.flac')
+            # os.system('cp {} dataset/single_label_clips'.format(audio_file))
+            class_idx = np.argmax(label)
+            label = dataset.label_map[class_idx]
+            if label in home_label:
+                count += 1
+                print('Segment id:', segment_id, label)
 
+    print('Number of single label clips:', count)
 if __name__ == '__main__':
-    import torchmetrics
-    import torch
-    dataset = AudioSet_dataset('../dataset/audioset')
+    dataset = AudioSet_dataset('dataset/audioset', split='eval', vision=False, label_level='clip')
     dataset.filter_modal(['audio',])
     print(len(dataset))
+    dataset_sample(dataset)
 
-    dataset_loader = torch.utils.data.DataLoader(dataset, batch_size=16, shuffle=False)
-    for i, data in enumerate(dataset_loader):
-        (audio, clip_label), frame_label = data
-
-
-        accuracy = torchmetrics.AveragePrecision(task='multilabel', num_labels=dataset.num_classes, average='macro')
-    
-        pseduo_frame_label = torch.repeat_interleave(clip_label, 10, dim=0)
-        # rint(pseduo_frame_label[:, :2], clip_label[:, :2])
-        frame_label = frame_label.reshape(-1, dataset.num_classes)
-        # print(frame_label[:, :2])
-        acc = accuracy(pseduo_frame_label[:, :], frame_label.long()[:, :])
-        print(acc)
-        if i > 0:
-            break
 
 
 

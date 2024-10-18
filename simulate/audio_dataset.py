@@ -87,7 +87,7 @@ class ESC50(Dataset):
         file_name = self.data[idx]
         audio = librosa.load(file_name, sr=self.sr)[0]
         class_idx = int(file_name[:-4].split('-')[-1])
-        return audio, class_idx
+        return audio, class_idx, (0, 5)
 class FUSS_Reverb(Dataset):
     def __init__(self, root='FUSS_reverb', split='TRAIN', sr=16000):
         root = os.path.join(root, split)

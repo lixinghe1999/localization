@@ -7,52 +7,91 @@ from scipy.signal import stft
 from pyroomacoustics.doa import MUSIC, SRP, TOPS
 import librosa
 import matplotlib.pyplot as plt
+import numpy as np
+from .imu import pyIMU
+import scipy.signal as signal
+import noisereduce as nr
 
-def init(mic_array, fs, nfft, mic_center=0):
-    kwargs = {'L': mic_center + mic_array,
+def init(mic_array, fs, nfft, algorithm='music'):
+    kwargs = {'L': mic_array,
             'fs': fs, 
             'nfft': nfft,
             'azimuth': np.deg2rad(np.arange(180)),
             'num_src': 1
     }
-    # algo = MUSIC(**kwargs)
-    algo = SRP(**kwargs)
-    # algo = TOPS(**kwargs)
+    if algorithm == 'music':
+        algo = MUSIC(**kwargs)
+    elif algorithm == 'srp':
+        algo = SRP(**kwargs)
+    elif algorithm == 'tops':
+        algo = TOPS(**kwargs)
     return algo
 
-def pra_doa(audio, mic_array, fs, nfft, intervals=None, plot=False):
-    algo = init(mic_array, fs, nfft, mic_center=0)
+def inference(algo, data, intervals=None, plot=True):
+    audio, imu = data
+    audio = nr.reduce_noise(audio, sr=16000, stationary=True)
+    print('Inferencing DOA...')
+    euler = pyIMU(imu[:, :6])
+
     nfft = algo.nfft
     fs = algo.fs
     predictions = []
     if intervals is None:
-        intervals = librosa.effects.split(y=audio, top_db=35, ref=1)
+        audio_sample = audio.shape[-1]
+        for i in range(0, audio_sample, 2*fs):
+            audio[:, i:i+2*fs] = librosa.util.normalize(audio[:, i:i+2*fs], axis=1)
+
+        intervals = librosa.effects.split(y=audio, top_db=30, ref=1)
         # remove too short intervals
         intervals = [interval for interval in intervals if interval[1] - interval[0] > nfft]
-    n_windows = np.shape(intervals)[0]
-    for i in range(n_windows):
-        start = intervals[i][0]
-        end = intervals[i][1]
-        data = audio[:, start:end]
-        # detect voice activity
-        stft_signals = stft(data, fs=fs, nperseg=nfft, noverlap=0, boundary=None)[2]
-        # M, F, T = stft_signals.shape
-        # for T in range(0, T, 10):
-        #     stft_signal = stft_signals[:, :, T:T+10]
-        #     algo.locate_sources(stft_signal)
-        #     predictions.append(np.rad2deg(algo.azimuth_recon[0]))
-        algo.locate_sources(stft_signals)
-        predictions.append(np.rad2deg(algo.azimuth_recon[0]))
-    predictions = np.array(predictions)
+        # convert to nfft time dimension
+        intervals = [(int(interval[0] / nfft), int(interval[1] / nfft)) for interval in intervals]
+
+    stft_signals = stft(audio, fs=fs, nperseg=nfft, noverlap=0, boundary=None)[2] # 
+    num_channels, num_freqs, num_time = stft_signals.shape
+    # intervals = [[0, num_time]] 
+
+    intervals_map = np.zeros(num_time)
+    predictions = np.ones(num_time) * -1
+    predictions_short = np.ones(num_time) * -1
+    for interval in intervals:
+        intervals_map[interval[0]:interval[1]] = 1
+
+    for i in range(num_time):
+        active_sound = intervals_map[i]
+        if active_sound:
+            stft_segment = stft_signals[:, :, i:i+1]
+            algo.locate_sources(stft_segment)
+            predictions_short[i] = np.rad2deg(algo.azimuth_recon[0])
+    for interval in intervals:
+        stft_segment = stft_signals[:, :, interval[0]:interval[1]]
+        algo.locate_sources(stft_segment)
+        predictions[interval[0]:interval[1]] = np.rad2deg(algo.azimuth_recon[0])
 
     if plot:
-        fig, axs = plt.subplots(2, 1, figsize=(10, 10))
+        fig, axs = plt.subplots(4, 1, figsize=(10, 10))
         axs[0].plot(audio[0])
-        for prediction, interval in zip(predictions, intervals):
-            line_x = np.arange(interval[0], interval[1]) / fs
-            line_y = np.ones_like(line_x) * prediction
-            axs[1].plot(line_x, line_y, 'r')
-        axs[1].set_xlim(0, audio.shape[-1] / fs)
+        axs[0].plot(np.repeat(intervals_map, nfft)* 0.5)
+
+        axs[1].plot(euler, label=['yaw', 'pitch', 'roll'])
+        axs[1].legend()        
+
+        axs[2].plot(predictions_short)
+        axs[2].plot(predictions)
+        
+
+        b, a = signal.butter(2, 0.5, 'low', fs=10)
+        predictions_short = signal.filtfilt(b, a, predictions_short)
+        
+        yaw = euler[::5, 0]
+        if len(yaw) < num_time:
+            yaw = np.concatenate([yaw, np.zeros(num_time - len(yaw))])
+        else:
+            yaw = yaw[:num_time]
+        axs[3].plot(predictions_short)
+        axs[3].plot(yaw * intervals_map)
+
+        
         plt.savefig('doa.png')
         plt.close()
-    return predictions, intervals
+    return predictions

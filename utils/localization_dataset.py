@@ -50,7 +50,7 @@ class Localization_dataset(Dataset):
         self.crop_dataset()
         # self.class_names = ['female', 'male', 'clapping', 'telephone', 'laughter', 'domestic sound', 'walk, footsteps', 'door, open or close', 
         #                     'music', 'music instrument', 'water tap', 'bell', 'knock']
-        self.raw_audio = False
+        self.raw_audio = self.config['raw_audio']
     def __len__(self):
         return len(self.crop_labels)
     
@@ -109,7 +109,6 @@ class Localization_dataset(Dataset):
                 frame_source[frame] += 1
         frame_metadata = np.array(frame_metadata)
         self.framewise_meta((frame_metadata, label_name))
-        # print(label, frame_metadata)
             
     def crop_dataset(self):
         '''
@@ -117,8 +116,8 @@ class Localization_dataset(Dataset):
         '''
         self.crop_labels = []
         for i, label_name in enumerate(tqdm(self.labels)):
-            self.framewise_meta(label_name)
-            # self.eventwise_meta(label_name)
+            # self.framewise_meta(label_name)
+            self.eventwise_meta(label_name)
         print('Total crop labels:', len(self.crop_labels))
     
     def _cache_(self, cache_folder):

@@ -144,14 +144,11 @@ params = dict(
 
         nb_fnn_layers=1,
         fnn_size=128,
-        unique_classes = 3,
-        t_pool_size=[5, 1, 1])
+        )
 
-batch_size, mic_channels, time_steps, mel_bins = 64, 10, 250, 64
-target_time_steps = 50
 
 class SeldModel(torch.nn.Module):
-    def __init__(self, mic_channels=10, unique_classes=9, activation='sigmoid',
+    def __init__(self, mic_channels=10, unique_classes=9, mel_bins=64, t_pool_size=[5, 1, 1], activation='sigmoid',
                   params=params):
         '''
         mic_chanels: 10 - 4mics, 3 - 2mics
@@ -159,24 +156,22 @@ class SeldModel(torch.nn.Module):
         '''
         super().__init__()
 
-        in_feat_shape = (batch_size, mic_channels, time_steps, mel_bins)
-        out_shape = (batch_size, target_time_steps, unique_classes)
+        # in_feat_shape = (batch_size, mic_channels, time_steps, mel_bins)
+        # out_shape = (batch_size, target_time_steps, unique_classes)
 
         self.nb_classes = unique_classes
         self.params=params
         self.conv_block_list = nn.ModuleList()
         if len(params['f_pool_size']):
             for conv_cnt in range(len(params['f_pool_size'])):
-                self.conv_block_list.append(ConvBlock(in_channels=params['nb_cnn2d_filt'] if conv_cnt else in_feat_shape[1], out_channels=params['nb_cnn2d_filt']))
-                self.conv_block_list.append(nn.MaxPool2d((params['t_pool_size'][conv_cnt], params['f_pool_size'][conv_cnt])))
+                self.conv_block_list.append(ConvBlock(in_channels=params['nb_cnn2d_filt'] if conv_cnt else mic_channels, out_channels=params['nb_cnn2d_filt']))
+                self.conv_block_list.append(nn.MaxPool2d((t_pool_size[conv_cnt], params['f_pool_size'][conv_cnt])))
                 self.conv_block_list.append(nn.Dropout2d(p=params['dropout_rate']))
 
-        self.gru_input_dim = params['nb_cnn2d_filt'] * int(np.floor(in_feat_shape[-1] / np.prod(params['f_pool_size'])))
+        self.gru_input_dim = params['nb_cnn2d_filt'] * int(np.floor(mel_bins / np.prod(params['f_pool_size'])))
         self.gru = torch.nn.GRU(input_size=self.gru_input_dim, hidden_size=params['rnn_size'],
                                 num_layers=params['nb_rnn_layers'], batch_first=True,
                                 dropout=params['dropout_rate'], bidirectional=True)
-
-        # self.pos_embedder = PositionalEmbedding(self.params['rnn_size'])
 
         self.mhsa_block_list = nn.ModuleList()
         self.layer_norm_list = nn.ModuleList()
@@ -184,17 +179,11 @@ class SeldModel(torch.nn.Module):
             self.mhsa_block_list.append(nn.MultiheadAttention(embed_dim=self.params['rnn_size'], num_heads=params['nb_heads'], dropout=params['dropout_rate'],  batch_first=True))
             self.layer_norm_list.append(nn.LayerNorm(self.params['rnn_size']))
 
-        # self.fnn_list_sed = torch.nn.ModuleList()
-        # if params['nb_fnn_layers']:
-        #     for fc_cnt in range(params['nb_fnn_layers']):
-        #         self.fnn_list_sed.append(nn.Linear(params['fnn_size'] if fc_cnt else self.params['rnn_size'], params['fnn_size'], bias=True))
-        # self.fnn_list_sed.append(nn.Linear(params['fnn_size'] if params['nb_fnn_layers'] else self.params['rnn_size'], out_shape[-1], bias=True))
-
         self.fnn_list_doa = torch.nn.ModuleList()
         if params['nb_fnn_layers']:
             for fc_cnt in range(params['nb_fnn_layers']):
                 self.fnn_list_doa.append(nn.Linear(params['fnn_size'] if fc_cnt else self.params['rnn_size'], params['fnn_size'], bias=True))
-        self.fnn_list_doa.append(nn.Linear(params['fnn_size'] if params['nb_fnn_layers'] else self.params['rnn_size'], out_shape[-1], bias=True))
+        self.fnn_list_doa.append(nn.Linear(params['fnn_size'] if params['nb_fnn_layers'] else self.params['rnn_size'], unique_classes, bias=True))
 
 
         if activation == 'sigmoid':
@@ -216,7 +205,6 @@ class SeldModel(torch.nn.Module):
 
         # pos_embedding = self.pos_embedder(x)
         # x = x + pos_embedding
-        
         for mhsa_cnt in range(len(self.mhsa_block_list)):
             x_attn_in = x 
             x, _ = self.mhsa_block_list[mhsa_cnt](x_attn_in, x_attn_in, x_attn_in)
@@ -229,17 +217,12 @@ class SeldModel(torch.nn.Module):
 
         doa = self.activation(doa)
         return doa
-        # return doa
-        # for fnn_cnt in range(len(self.fnn_list_sed)):
-        #     sed = self.fnn_list_sed[fnn_cnt](sed)
-        # sed = torch.sigmoid(sed)
 
-        # output = torch.cat((sed, doa), -1)
-        # return output
 
 if __name__ == '__main__':
     
+    batch_size, mic_channels, time_steps, mel_bins = 64, 10, 500, 64
     model = SeldModel()
-    x = torch.randn(batch_size, mic_channels, time_steps, mel_bins)
+    x = torch.randn(batch_size, mic_channels, time_steps, mel_bins, )
     y = model(x)
     print(y.shape)  # Expected output torch.Size([64, 50, 13])
