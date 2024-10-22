@@ -1,5 +1,5 @@
 from torch.utils.data import Dataset
-from .window_label import Gaussian_label, ACCDOA_label
+from .window_label import ACCDOA_label
 from .window_feature import spectrogram, gcc_mel_spec
 import os
 import librosa

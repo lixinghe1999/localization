@@ -1,20 +1,7 @@
 '''
-label for every 0.1s window
+label for every 0.1s window (by default)
 '''
 import numpy as np
-import scipy.signal as signal
-def Gaussian_label(labels, config):
-    '''
-    label: [(frame, class_idx, source_idx, location), ...]
-    Note: no classification at all
-    '''
-    total_num_frames = config['duration'] * 10
-    y = np.arange(config['min_azimuth'], config['max_azimuth'], 1, dtype=float)
-    y_window = np.zeros((total_num_frames, y.shape[0]))
-    for frame, _, _, azimuth, _, _ in labels:
-        y_gaussian = np.exp(-((y - azimuth) ** 2) / (2 * 10 ** 2))
-        y_window[frame] += y_gaussian
-    return y_window
 
 def doa2idx(azimuth, elevation):
     # [front, left, right, back, up, down]
@@ -40,17 +27,17 @@ def dist2idx(distance):
         return 1
 
 def Region_label(labels, config):
-    total_num_frames = config['duration'] * 10
+    total_num_frames = int(config['duration'] / config['frame_duration'])
     num_class = config['num_class']
 
     label_window = np.zeros((total_num_frames, 8 + num_class))
     for frame, class_idx, _, azimuth, elevation, distance in labels:
         doa_idx = doa2idx(azimuth, elevation)
-        label_window[int(frame), doa_idx] = 1
-
-        dist_idx = dist2idx(distance)
-        label_window[int(frame), 6 + dist_idx] = 1
-        label_window[int(frame), 8 + int(class_idx)] = 1
+        dist_idx = dist2idx(distance)        
+        frame = int(frame * 0.1 / config['frame_duration'])
+        label_window[frame, doa_idx] = 1
+        label_window[frame, 6 + dist_idx] = 1
+        label_window[frame, 8 + int(class_idx)] = 1
     return label_window
 
 
@@ -60,29 +47,22 @@ def ACCDOA_label(labels, config, sed=False):
     config
     sed: bool, if True, do sed+doa, else doa only
     '''
-    if not sed:
-        num_class = 1
-    else:
-        num_class = config['num_class']
+    num_class = config['num_class']
     _nb_label_frames = config['duration'] * 10
-    se_label = np.zeros((_nb_label_frames, num_class))
-    x_label = np.zeros((_nb_label_frames, num_class))
-    y_label = np.zeros((_nb_label_frames, num_class))
-    z_label = np.zeros((_nb_label_frames, num_class))
-
+    label_mat = np.zeros((_nb_label_frames, num_class, 4))
     for frame, class_idx, _, azimuth, elevation, _  in labels:
-        if not sed:
+        if num_class == 1:
             class_idx = 0
         if frame < _nb_label_frames:
             x = np.cos(np.radians(azimuth)) * np.cos(np.radians(elevation))
             y = np.sin(np.radians(azimuth)) * np.cos(np.radians(elevation))
             z = np.sin(np.radians(elevation))
 
-            se_label[frame, class_idx] = 1
-            x_label[frame, class_idx] = x
-            y_label[frame, class_idx] = y
-            z_label[frame, class_idx] = z
-    label_mat = np.concatenate((se_label, x_label, y_label, z_label), axis=1)
+            label_mat[frame, class_idx, 0] = 1
+            label_mat[frame, class_idx, 1] = x
+            label_mat[frame, class_idx, 2] = y
+            label_mat[frame, class_idx, 3] = z
+    label_mat = label_mat.reshape(-1, num_class * 4)
     return label_mat
 
 def Multi_ACCDOA_label(labels, config):
@@ -91,12 +71,9 @@ def Multi_ACCDOA_label(labels, config):
     config
     sed: bool, if True, do sed+doa, else doa only
     '''
-    num_source = 3
+    num_source = 2
     _nb_label_frames = config['duration'] * 10
-    se_label = np.zeros((_nb_label_frames, num_source))
-    x_label = np.zeros((_nb_label_frames, num_source))
-    y_label = np.zeros((_nb_label_frames, num_source))
-    z_label = np.zeros((_nb_label_frames, num_source))
+    label_mat = np.zeros((_nb_label_frames, num_source, 4))
 
     for frame, _, source_idx, azimuth, elevation, _  in labels:
         if frame < _nb_label_frames:
@@ -104,10 +81,22 @@ def Multi_ACCDOA_label(labels, config):
             y = np.sin(np.radians(azimuth)) * np.cos(np.radians(elevation))
             z = np.sin(np.radians(elevation))
 
-            se_label[frame, source_idx] = 1
-            x_label[frame, source_idx] = x
-            y_label[frame, source_idx] = y
-            z_label[frame, source_idx] = z
-    label_mat = np.concatenate((se_label, x_label, y_label, z_label), axis=1)
+            label_mat[frame, source_idx, 0] = 1
+            label_mat[frame, source_idx, 1] = x
+            label_mat[frame, source_idx, 2] = y
+            label_mat[frame, source_idx, 3] = z
+    label_mat = label_mat.reshape(-1, num_source * 4)
     return label_mat
+
+def Gaussian_label(labels, config):
+    _nb_label_frames = config['duration'] * 10
+    label_mat = np.zeros((_nb_label_frames, 360))
+    x = np.arange(360)
+    for frame, _, _, azimuth, elevation, _  in labels:
+        if frame < _nb_label_frames:
+            gaussian = np.exp(-((x - azimuth) ** 2) / (2 * 10 ** 2))
+            label_mat[frame] += gaussian
+            label_mat[frame] /= np.max(label_mat[frame])    
+    return label_mat
+
 

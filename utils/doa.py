@@ -27,7 +27,7 @@ def init(mic_array, fs, nfft, algorithm='music'):
         algo = TOPS(**kwargs)
     return algo
 
-def inference(algo, data, intervals=None, plot=True):
+def inference(algo, data, plot=''):
     audio, imu = data
     audio = nr.reduce_noise(audio, sr=16000, stationary=True)
     print('Inferencing DOA...')
@@ -36,16 +36,15 @@ def inference(algo, data, intervals=None, plot=True):
     nfft = algo.nfft
     fs = algo.fs
     predictions = []
-    if intervals is None:
-        audio_sample = audio.shape[-1]
-        for i in range(0, audio_sample, 2*fs):
-            audio[:, i:i+2*fs] = librosa.util.normalize(audio[:, i:i+2*fs], axis=1)
+    audio_sample = audio.shape[-1]
+    for i in range(0, audio_sample, 2*fs):
+        audio[:, i:i+2*fs] = librosa.util.normalize(audio[:, i:i+2*fs], axis=1)
 
-        intervals = librosa.effects.split(y=audio, top_db=30, ref=1)
-        # remove too short intervals
-        intervals = [interval for interval in intervals if interval[1] - interval[0] > nfft]
-        # convert to nfft time dimension
-        intervals = [(int(interval[0] / nfft), int(interval[1] / nfft)) for interval in intervals]
+    intervals = librosa.effects.split(y=audio, top_db=30, ref=1)
+    # remove too short intervals
+    intervals = [interval for interval in intervals if interval[1] - interval[0] > nfft]
+    # convert to nfft time dimension
+    intervals = [(int(interval[0] / nfft), int(interval[1] / nfft)) for interval in intervals]
 
     stft_signals = stft(audio, fs=fs, nperseg=nfft, noverlap=0, boundary=None)[2] # 
     num_channels, num_freqs, num_time = stft_signals.shape
@@ -68,7 +67,8 @@ def inference(algo, data, intervals=None, plot=True):
         algo.locate_sources(stft_segment)
         predictions[interval[0]:interval[1]] = np.rad2deg(algo.azimuth_recon[0])
 
-    if plot:
+    if len(plot) > 0:
+        print('Plotting...')
         fig, axs = plt.subplots(4, 1, figsize=(10, 10))
         axs[0].plot(audio[0])
         axs[0].plot(np.repeat(intervals_map, nfft)* 0.5)
@@ -79,7 +79,6 @@ def inference(algo, data, intervals=None, plot=True):
         axs[2].plot(predictions_short)
         axs[2].plot(predictions)
         
-
         b, a = signal.butter(2, 0.5, 'low', fs=10)
         predictions_short = signal.filtfilt(b, a, predictions_short)
         
@@ -90,8 +89,8 @@ def inference(algo, data, intervals=None, plot=True):
             yaw = yaw[:num_time]
         axs[3].plot(predictions_short)
         axs[3].plot(yaw * intervals_map)
-
-        
-        plt.savefig('doa.png')
+        print()
+        plt.savefig(f'{plot}.png')
         plt.close()
+
     return predictions

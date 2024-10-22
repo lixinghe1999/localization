@@ -2,6 +2,9 @@ simulate/HRTF-Database
 simulate/TIMIT
 simulate/ESC-50-master
 simulate/ssdata_reverb
+simulate/NIGENS
+simulate/TUT-rare-sound-events-2017-development
+
 dataset/
 lightning_logs/
 cache/

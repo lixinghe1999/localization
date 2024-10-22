@@ -6,7 +6,6 @@ from random import uniform, sample
 import scipy.signal as signal
 from tqdm import tqdm
 import soundfile as sf
-import json
 import pandas as pd
 from pyroomacoustics import doa, Room, ShoeBox
 
@@ -29,7 +28,7 @@ def access_IR(HRTF, measurement, emitter, plot=False):
         IR = HRTF.Data.IR.get_values(indices={"M": measurement, "R": receiver, "E": emitter})
         IRs.append(IR)
     IRs = np.array(IRs)
-    relative_loc_car = (np.round(HRTF.Emitter.Position.get_relative_values(HRTF.Listener, indices={"M":measurement}, angle_unit="degree"),2))
+    # relative_loc_car = (np.round(HRTF.Emitter.Position.get_relative_values(HRTF.Listener, indices={"M":measurement}, angle_unit="degree"),2))
     relative_loc_sph = (np.round(HRTF.Emitter.Position.get_relative_values(HRTF.Listener, indices={"M":measurement}, system="spherical", angle_unit="degree"),2))
     relative_loc_sph = relative_loc_sph[0]
     relative_loc_sph[0] = relative_loc_sph[0] % 360 # convert to 0-360
@@ -55,8 +54,6 @@ def active_frame(audio, frame=0.1, sr=16000):
     energy = energy / np.max(energy)
     mask = energy > 0.1
     return audio, mask
-
-
 def random_room(num_room=100, sr=16000):
     rooms = []
     for _ in range(num_room):
@@ -69,33 +66,62 @@ def random_room(num_room=100, sr=16000):
     return rooms
 
 class ISM_simulator():
-    def __init__(self) -> None:
+    def __init__(self, mic_array = np.c_[[ 0.08,  0.0, 0.0],
+                                [ -0.08,  0.0, 0.0],
+                                [ 0.08,  -0.1, 0.0],
+                                [ -0.08,  -0.1, 0.0],
+                                [0.0, 0.0, 0.0]] ) -> None:
         self.fs = 16000 
         self.max_order = 10
         self.snr_lb, self.snr_ub = 20, 30
         self.offset = 0.5
-        self.mic_array =  np.c_[[ 0.08,  0.0, 0.0],
-                                [ -0.08,  0.0, 0.0],
-                                [ 0.08,  -0.1, 0.0],
-                                [ -0.08,  -0.1, 0.0],
-                                [0.0, 0.0, 0.0]]
+        self.mic_array = mic_array
         self.room_dims = random_room()
+        self.HRTF = False
+    def init_HRTF(self, HRTF_folder, user=None):
+        self.HRTF_folder = HRTF_folder
+        self.sofas = os.listdir(self.HRTF_folder)
+        if user is not None:
+            self.sofas = [self.sofas[i] for i in user]
+        self.HRTFs = []
+        for i, s in enumerate(self.sofas):
+            HRTF_path = os.path.join(self.HRTF_folder, s)
+            HRTF = sofa.Database.open(HRTF_path)
+            M = HRTF.Dimensions.M
+            HRTF_list = [[]] * (360 // 10)
+            print(f"Loading user {i} with {M} measurements")
+            for m in tqdm(range(M)):
+                IR, relative_loc_sph = access_IR(HRTF, m, 0)
+                azimuth_idx = int(relative_loc_sph[0] // 10)
+                HRTF_list[azimuth_idx].append([relative_loc_sph, IR])
+            self.HRTFs.append(HRTF_list)
+            break
+        self.HRTF = True
+    def apply_HRTF(self, signals, doa_degree, ranges):
+        HRTF_list = sample(self.HRTFs, 1)[0]
+        assert len(signals) == len(doa_degree)
+        HRTF_signals = []
+        for i in range(len(signals)):
+            s = signals[i]
+            doa = doa_degree[i]
+            r = ranges[i]
+            doa_idx = int(doa[0] // 10)
+            IRs = HRTF_list[doa_idx]
+            IR = sample(IRs, 1)[0][1]
 
+            left = signal.convolve(s[0], IR[0])
+            right = signal.convolve(s[1], IR[1])
+            HRTF_signals.append(np.c_[left, right].T)
+        HRTF_signals = np.array(HRTF_signals)
+        return HRTF_signals  
     def simulate(self, room, mic_center, dataset, sig_index, min_diff, max_range, out_folder):
-        signal, doa_degree, ranges, class_names, active_masks = [], [], [], [], []
+        signals, doa_degree, ranges, class_names, active_masks = [], [], [], [], []
         for idx in sig_index:
-            audio, class_name, (start, end) = dataset[idx]
-
-            if start is None or end is None:
+            audio, class_name, active_mask = dataset[idx]
+            if active_mask is None:
                 audio, active_mask = active_frame(audio, frame=0.1)
-            else:
-                frame_number = int(len(audio) / self.fs / 0.1)
-                active_mask = np.zeros(frame_number)
-                start_frame = int(start / 0.1)
-                end_frame = int(end / 0.1)
-                active_mask[start_frame:end_frame] = 1
             active_masks.append(active_mask)
-            signal.append(audio)
+            signals.append(audio)
             class_names.append(class_name)
 
             while 1:
@@ -109,11 +135,14 @@ class ISM_simulator():
             ranges.append(uniform(0.3, max_range))
 
         assert len(doa_degree) == len(ranges)
-        for (azimuth, elevation), r, s in zip(doa_degree, ranges, signal):
+        for (azimuth, elevation), r, s in zip(doa_degree, ranges, signals):
             azimuth_rad = np.deg2rad(azimuth)
             source_loc = mic_center + np.array([r * np.cos(azimuth_rad), r * np.sin(azimuth_rad), 0])
             room.add_source(source_loc, signal=s)
         signals = room.simulate(return_premix=True)
+
+        if self.HRTF:
+            signals = self.apply_HRTF(signals, doa_degree, ranges)
 
         mixed_signal = np.sum(signals, axis=0)
         sf.write(out_folder + '.wav', mixed_signal.T, 16000)
@@ -169,7 +198,6 @@ class HRTF_simulator():
         else:
             self.sofas = sofas[40:]
     
-
     def simulate(self, HRTF, dataset, max_source, min_diff, out_folder):
         '''
         return source < max_source with class_name, signals, locations
@@ -190,8 +218,16 @@ class HRTF_simulator():
                 if ok_flag:
                     break
                 
-            audio, class_name = dataset[data_index]
-            audio, active_mask = active_frame(audio)
+            audio, class_name, (start, end) = dataset[data_index]
+
+            if start is None or end is None:
+                audio, active_mask = active_frame(audio, frame=0.1)
+            else:
+                frame_number = int(len(audio) / self.fs / 0.1)
+                active_mask = np.zeros(frame_number)
+                start_frame = int(start / 0.1)
+                end_frame = int(end / 0.1)
+                active_mask[start_frame:end_frame] = 1
 
             class_names.append(class_name)
             left = signal.convolve(audio, IR[0])

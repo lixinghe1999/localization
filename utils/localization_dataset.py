@@ -1,5 +1,5 @@
 from torch.utils.data import Dataset, DataLoader
-from .window_label import Gaussian_label, ACCDOA_label, Multi_ACCDOA_label, Region_label
+from .window_label import ACCDOA_label, Multi_ACCDOA_label, Region_label, Gaussian_label
 from .window_feature import spectrogram, gcc_mel_spec 
 import os
 import librosa
@@ -29,14 +29,14 @@ class Localization_dataset(Dataset):
     def __init__(self, root_dir, config=None, sr=16000):
         self.config = config
         self.encoding = self.config['encoding']
-        if self.encoding == 'Gaussian':
-            self.encoding = Gaussian_label
-        elif self.encoding == 'ACCDOA':
+        if self.encoding == 'ACCDOA':
             self.encoding = ACCDOA_label
         elif self.encoding == 'Multi_ACCDOA':
             self.encoding = Multi_ACCDOA_label
         elif self.encoding == 'Region':
             self.encoding = Region_label
+        elif self.encoding == 'Gaussian':
+            self.encoding = Gaussian_label
 
         self.root_dir = root_dir
         self.data_folder = os.path.join(self.root_dir, 'audio')
@@ -45,12 +45,15 @@ class Localization_dataset(Dataset):
         # make sure 
         self.sr = sr
         self.duration = self.config['duration']
+        self.frame_duration = self.config['frame_duration']
         self.class_names = ['alarm', 'baby', 'blender', 'cat', 'crash', 'dishes', 'dog', 'engine', 'fire', 'footsteps', 
                             'glassbreak', 'gunshot', 'knock', 'phone', 'piano', 'scream', 'speech', 'water']
-        self.crop_dataset()
-        # self.class_names = ['female', 'male', 'clapping', 'telephone', 'laughter', 'domestic sound', 'walk, footsteps', 'door, open or close', 
-        #                     'music', 'music instrument', 'water tap', 'bell', 'knock']
+
         self.raw_audio = self.config['raw_audio']
+        self.label_type = self.config['label_type']
+
+        self.crop_dataset()
+
     def __len__(self):
         return len(self.crop_labels)
     
@@ -66,8 +69,10 @@ class Localization_dataset(Dataset):
         if len(label.shape) == 1:
             label = label[np.newaxis, :]
         audio_file = os.path.join(self.data_folder, label_name[:-4] + '.wav')
-        max_frame = int(librosa.get_duration(path=audio_file) * 10)
-        frame_duration = int(self.duration * 10)
+        max_frame = int(librosa.get_duration(path=audio_file) / 0.1)
+
+        frame_duration = int(self.duration / 0.1)
+
         for start_frame in range(0, max_frame, frame_duration):
             end_frame = min(start_frame + frame_duration, max_frame)
             mini_chunk = []
@@ -116,41 +121,49 @@ class Localization_dataset(Dataset):
         '''
         self.crop_labels = []
         for i, label_name in enumerate(tqdm(self.labels)):
-            # self.framewise_meta(label_name)
-            self.eventwise_meta(label_name)
+            if self.label_type == 'framewise':
+                self.framewise_meta(label_name)
+            else:
+                self.eventwise_meta(label_name)
         print('Total crop labels:', len(self.crop_labels))
     
     def _cache_(self, cache_folder):
         print('Caching the dataset')
         os.makedirs(cache_folder, exist_ok=True)
-        batch_size = 8
-        loader = DataLoader(self, batch_size=batch_size, shuffle=False, num_workers=8)
-        for i, (data, label) in enumerate(tqdm(loader)):
-            data = data.numpy()
-            for j in range(data.shape[0]):
-                np.save(os.path.join(cache_folder, f'{i * batch_size + j}.npy'), data[j])
+
+        num_cached = len(os.listdir(cache_folder))
+        if self.__len__() == num_cached:
+            print('Already cached')
+        else:
+            batch_size = 8
+            loader = DataLoader(self, batch_size=batch_size, shuffle=False, num_workers=batch_size)
+            for i, (data, _, _) in enumerate(tqdm(loader)):
+                data = data.numpy()
+                for j in range(data.shape[0]):
+                    np.save(os.path.join(cache_folder, f'{i * batch_size + j}.npy'), data[j])
         self.cache_folder = cache_folder
+    
     def __getitem__(self, index, encoding=True):
         '''
         label = [frame, class, source/instance, azimuth, elevation, distance]
         '''
         label_name, start_frame, end_frame, label = self.crop_labels[index]
-        if encoding:
-            label = self.encoding(label, self.config).astype(np.float32)
-        if hasattr(self, 'cache_folder'):
-            data = np.load(os.path.join(self.cache_folder, f'{index}.npy'))
-            return data, label
-        
+        label = self.encoding(label, self.config).astype(np.float32)
+
         start_frame_audio = start_frame / 10
         audio_name = os.path.join(self.data_folder, label_name)
-        audio, sr = librosa.load(audio_name[:-4] + '.wav', sr=self.sr, mono=False, offset=start_frame_audio, duration=self.duration)
-        if audio.shape[-1] < self.duration * self.sr:
-                audio = np.pad(audio, ((0, 0), (0, self.duration * self.sr - audio.shape[-1])))
-        if self.raw_audio:
-            return audio, label
+        if hasattr(self, 'cache_folder'):
+            data = np.load(os.path.join(self.cache_folder, f'{index}.npy'))
+            audio, sr = librosa.load(audio_name[:-4] + '.wav', sr=self.sr, mono=True, offset=start_frame_audio, duration=self.duration)
+            if audio.shape[-1] < self.duration * self.sr:
+                audio = np.pad(audio, ((0, self.duration * self.sr - audio.shape[-1])))
         else:
+            audio, sr = librosa.load(audio_name[:-4] + '.wav', sr=self.sr, mono=False, offset=start_frame_audio, duration=self.duration)
+            if audio.shape[-1] < self.duration * self.sr:
+                audio = np.pad(audio, ((0, 0), (0, self.duration * self.sr - audio.shape[-1])))
             spec = spectrogram(audio)
-            gcc = gcc_mel_spec(spec).astype(np.float32)
-            return gcc, label
+            data = gcc_mel_spec(spec).astype(np.float32)
+            audio = audio[0]
+        return data, audio, label
             
         

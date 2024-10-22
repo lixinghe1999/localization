@@ -117,27 +117,25 @@ class ALL_IN_ONE_Inferencer():
             return y_dist
         return model, dist_inference
 
-    def run(self, model, algo, audio):
-        print('Running the ALL-IN-ONE inferencer...')
-        predictions = algo(model, audio)
-        return predictions
     
 if __name__ == '__main__':
     inferencer = ALL_IN_ONE_Inferencer(mic_array=np.array([[-0.1, 0], [0.1, 0]]))
-    
-    dataset_dir = 'dataset/earphone/20241017/audio'
+    doa, doa_inference = inferencer.init_doa()  
+    dataset_dir = 'dataset/earphone/20241019/audio'
     data_files = os.listdir(dataset_dir)
     audio_files = [os.path.join(dataset_dir, file) for file in data_files if file.endswith('.wav')]
     imu_files = [os.path.join(dataset_dir, file) for file in data_files if file.endswith('.npy')]
 
     audio_files.sort()
     imu_files.sort()
-    audio_files = audio_files[:1]
-    imu_files = imu_files[:1]
-    for audio_file, imu_file in zip(audio_files, imu_files):
+    # audio_files = audio_files[3:4]
+    # imu_files = imu_files[3:4]
+    for i, (audio_file, imu_file) in enumerate(zip(audio_files, imu_files)):
         print('Processing:', audio_file, imu_file)
         audio, sr = librosa.load(audio_file, sr=16000, mono=False)
         imu = np.load(imu_file)
+        predictions = doa_inference(doa, (audio, imu), plot=audio_file[:-4])
+
 
     # audio, sr = librosa.load('__LU8E6dUsI_40000.flac', sr=16000, mono=True)
     # audio, sr = librosa.load('__p-iA312kg_70000.flac', sr=16000, mono=True)
@@ -151,8 +149,7 @@ if __name__ == '__main__':
     # audio_text_cosine = np.dot(audio_embed, text_embed.T) / (np.linalg.norm(audio_embed) * np.linalg.norm(text_embed))
     # print('Audio-Text cosine similarity:', audio_text_cosine)
 
-    doa, doa_inference = inferencer.init_doa()  
-    predictions = inferencer.run(doa, doa_inference, (audio, imu))
+    
     # print('DOA predictions:', predictions)
 
     # cls, cls_inference = inferencer.init_cls()

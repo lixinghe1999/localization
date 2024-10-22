@@ -26,15 +26,23 @@ def spectrogram(audio_input):
         spectra.append(stft_ch[:, :_nb_frames])
     return np.array(spectra).T
 
-def binaural_spc(linear_spectra):
-    # first feature: sin and cos of the phase difference
-    phase_diff = np.angle(linear_spectra[:, :, 0]) - np.angle(linear_spectra[:, :, 1])
-    sin_phase_diff = np.sin(phase_diff)
-    cos_phase_diff = np.cos(phase_diff)
-    # second feature: interaural-level-difference
-    ild = 10 * np.log10(np.abs(linear_spectra[:, :, 0]) / np.abs(linear_spectra[:, :, 1]))
-    
+def salsalite(linear_spectra):
+    # Adapted from the official SALSA repo- https://github.com/thomeou/SALSA
+    # spatial features
+    phase_vector = np.angle(linear_spectra[:, :, 1:] * np.conj(linear_spectra[:, :, 0, None]))
+    phase_vector = phase_vector / (self._delta * self._freq_vector)
+    phase_vector = phase_vector[:, self._lower_bin:self._cutoff_bin, :]
+    phase_vector[:, self._upper_bin:, :] = 0
+    phase_vector = phase_vector.transpose((0, 2, 1)).reshape((phase_vector.shape[0], -1))
 
+    # spectral features
+    linear_spectra = np.abs(linear_spectra)**2
+    for ch_cnt in range(linear_spectra.shape[-1]):
+        linear_spectra[:, :, ch_cnt] = librosa.power_to_db(linear_spectra[:, :, ch_cnt], ref=1.0, amin=1e-10, top_db=None)
+    linear_spectra = linear_spectra[:, self._lower_bin:self._cutoff_bin, :]
+    linear_spectra = linear_spectra.transpose((0, 2, 1)).reshape((linear_spectra.shape[0], -1))
+    
+    return np.concatenate((linear_spectra, phase_vector), axis=-1) 
 
 def gcc_mel_spec(linear_spectra):
     '''

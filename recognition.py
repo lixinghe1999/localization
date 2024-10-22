@@ -18,8 +18,6 @@ class AudioRecognition(pl.LightningModule):
         dataset = AudioSet_dataset(root=root, split='train', frame_duration=1, vision=False, label_level='frame')
         dataset.filter_modal(['audio', 'embeddings'])
         self.train_dataset, self.test_dataset = random_split(dataset, [int(len(dataset)*0.8), len(dataset)-int(len(dataset)*0.8)])
-        # self.train_dataset.class_name = dataset.class_name
-        # self.test_dataset.class_name = dataset.class_name
 
         # self.train_dataset = AudioSet_dataset(root=root, split='train', frame_duration=1, vision=False, label_level='frame')
         # self.test_dataset = AudioSet_dataset(root=root, split='eval', frame_duration=1, vision=False, label_level='frame')

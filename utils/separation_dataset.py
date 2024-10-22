@@ -149,7 +149,7 @@ class Separation_dataset(Dataset):
                     source_active_azimuth[0:azimuth_max - 360] = l[2]
                 else:
                     source_active_azimuth[azimuth_min:azimuth_max] = l[2]
-            if np.random.uniform() < 0.2 or len(source_files) < 1 or len(label) < 1: # negative example, output 0
+            if np.random.uniform() < 0 or len(source_files) < 1 or len(label) < 1: # negative example, output 0
                 # return index where the source is not active
                 negative_azimuth = np.where(source_active_azimuth == -1)[0]
                 azimuth = np.random.choice(negative_azimuth)
@@ -161,6 +161,7 @@ class Separation_dataset(Dataset):
                 source_audio = source_audio[source_idx]
             target_pos = np.array([np.cos(np.deg2rad(azimuth)), np.sin(np.deg2rad(azimuth))])
             mixture_audio, shifts = shift_mixture(mixture_audio, target_pos, self.sr)
+
             mixture_audio = mixture_audio[:, 8:]
             source_audio = source_audio[:1, 8:]
             # print('mixture_audio shape:', mixture_audio.shape, 'source_audio shape:', source_audio.shape, shifts)
@@ -188,83 +189,3 @@ class Separation_dataset(Dataset):
             # print(mixture_audio.shape, 'region_audio shape:', region_audio.shape, 'region_active:', region_active)
             return mixture_audio, region_audio
        
-class FUSSDataset(Dataset):
-    """Dataset class for FUSS [1] tasks.
-
-    Args:
-        file_list_path (str): Path to the txt (csv) file created at stage 2
-            of the recipe.
-        return_bg (bool): Whether to return the background along the mixture
-            and sources (useful for SIR, SAR computation). Default: False.
-
-    References
-        [1] Scott Wisdom et al. "What's All the FUSS About Free Universal
-        Sound Separation Data?", 2020, in preparation.
-    """
-
-    dataset_name = "FUSS"
-
-    def __init__(self, file_list_path, sample_rate, return_bg=False):
-        super().__init__()
-        # Arguments
-        self.folder = os.path.dirname(file_list_path)
-        self.return_bg = return_bg
-        # Constants
-        self.max_n_fg = 2
-        self.n_src = self.max_n_fg  # Same variable as in WHAM
-        self.sample_rate = sample_rate
-        self.num_samples = self.sample_rate * 10
-
-        # Load the file list as a dataframe
-        # FUSS has a maximum of 3 foregrounds, make column names
-        self.fg_names = [f"fg{i}" for i in range(self.max_n_fg)]
-        names = ["mix", "bg"] + self.fg_names
-        # Lines with less labels will have nan, replace with empty string
-        self.mix_df = pd.read_csv(file_list_path, sep="\t", names=names)
-        # Number of foregrounds (fg) vary from 0 to 3
-        # This can easily be used to remove mixtures with less than x fg
-        # remove_less_than = 2
-        # self.mix_df.dropna(thresh=remove_less_than, inplace=True)
-        # self.mix_df.reset_index(inplace=True)
-
-        # only keep the mixtures where there are exactly 2 sources
-        self.mix_df = self.mix_df[self.mix_df[self.fg_names].notna().sum(axis=1) == 2]
-        self.mix_df.reset_index(inplace=True, drop=True)
-
-        self.mix_df.fillna(value="", inplace=True)
-
-    def __len__(self):
-        return len(self.mix_df)
-
-    def __getitem__(self, idx):
-        # Each line has absolute to miture, background and foregrounds
-        line = self.mix_df.iloc[idx]
-        mix = librosa.load(os.path.join(self.folder, line["mix"]), sr=self.sample_rate, mono=True)[0]
-        sources = []
-        num_sources = 0
-        for fg_path in [line[fg_n] for fg_n in self.fg_names]:
-            if fg_path:
-                num_sources += 1
-                source = librosa.load(os.path.join(self.folder, fg_path), sr=self.sample_rate, mono=True)[0]
-            else:
-                source = np.zeros_like(mix)
-            sources.append(source)
-        sources = torch.from_numpy(np.vstack(sources))
-
-        if self.return_bg:
-            bg = librosa.load(os.path.join(self.folder, line["bg"]), sr=self.sample_rate, mono=True)[0]
-            return torch.from_numpy(mix), sources, torch.from_numpy(bg)
-        # print('mix shape:', mix.shape, 'sources shape:', sources.shape)
-        return torch.from_numpy(mix), sources
-
-    def get_infos(self):
-        """Get dataset infos (for publishing models).
-
-        Returns:
-            dict, dataset infos with keys `dataset`, `task` and `licences`.
-        """
-        infos = dict()
-        infos["dataset"] = self.dataset_name
-        infos["task"] = "sep_noisy"
-        infos["licenses"] = [fuss_license]
-        return infos

@@ -66,7 +66,7 @@ def pcm_to_wav(pcm_file, wav_file, sample_rate=48000, num_channels=1):
     # Write to WAV file
     wavfile.write(wav_file, sample_rate, pcm_array)
 
-datadir = 'dataset/earphone/20241017'
+datadir = 'dataset/earphone/20241019'
 audio_dir = os.path.join(datadir, 'audio')
 meta_dir = os.path.join(datadir, 'meta')
 

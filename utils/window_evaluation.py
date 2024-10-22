@@ -2,6 +2,9 @@ import numpy as np
 from scipy import signal
 import matplotlib.pyplot as plt
 import itertools
+import torchmetrics
+import torch
+import torchmetrics.classification
 def distance_between_cartesian_coordinates(x1, y1, z1, x2, y2, z2):
     """
     Angular distance between two cartesian coordinates
@@ -20,7 +23,9 @@ def distance_between_cartesian_coordinates(x1, y1, z1, x2, y2, z2):
     dist = np.clip(dist, -1, 1)
     dist = np.arccos(dist) * 180 / np.pi
     return dist
-def ACCDOA_evaluation(pred, label, implicit=True, vis=False):
+
+def ACCDOA_evaluation(pred, label, implicit=True):
+    
     if implicit:
         '''
         pred: [batch, time, n_class * 3 (x, y, z)]
@@ -30,9 +35,9 @@ def ACCDOA_evaluation(pred, label, implicit=True, vis=False):
         n_class = N1 // 3
         assert N2 == n_class * 4
         pred = pred.reshape(-1, n_class, 3)
-        pred_sed = np.sqrt(np.sum(pred**2, axis=-1)) > 0.5  # [batch*time, n_class]
+        pred_sed = np.sqrt(np.sum(pred**2, axis=-1)) # [batch*time, n_class]
         label = label.reshape(-1, n_class, 4)
-        label_sed = label[..., 0] > 0.5 # [batch*time, n_class]
+        label_sed = label[..., 0] # [batch*time, n_class]
     else:
         '''
         pred: [batch, time, n_class * 4 (x, y, z)]
@@ -40,53 +45,44 @@ def ACCDOA_evaluation(pred, label, implicit=True, vis=False):
         '''
         n_class = pred.shape[-1] // 4
         pred = pred.reshape(-1, n_class, 4); label = label.reshape(-1, n_class, 4)
-        pred_sed = pred[..., 0] > 0.5 # [batch*time, n_class]
-        label_sed = label[..., 0] > 0.5 # [batch*time, n_class]
-
-    if vis:
-        raise NotImplementedError
+        pred_sed = pred[..., 0]# [batch*time, n_class]
+        label_sed = label[..., 0]# [batch*time, n_class]
+    pred_sed_binary = pred_sed > 0.5
+    if n_class == 1:
+        sed_F1 = torchmetrics.F1Score(task='binary') (torch.from_numpy(pred_sed_binary), torch.from_numpy(label_sed))
     else:
-        # correct sed prediction: the pred and label are both active
-        sed_TP = np.sum(np.logical_and(pred_sed, label_sed))
-        sed_FP = np.sum(np.logical_and(pred_sed, np.logical_not(label_sed)))
-        sed_FN = np.sum(np.logical_and(np.logical_not(pred_sed), label_sed))
-        sed_precision = sed_TP / (sed_TP + sed_FP + 1e-10)
-        sed_recall = sed_TP / (sed_TP + sed_FN + 1e-10)
-        sed_F1 = 2 * sed_precision * sed_recall / (sed_precision + sed_recall + 1e-10)
-
-
-        # correct: the pred and label are both active and the distance is less than 20
-        distances = []
-        TP, FP, FN, TN = 0, 0, 0, 0
-        for i in range(pred.shape[0]): # sample
-            for c in range(n_class):
-                if label_sed[i, c] == pred_sed[i, c]:
-                    if label_sed[i, c]: # positive sample
-                        dist = distance_between_cartesian_coordinates(pred[i, c, 0], pred[i, c, 1], pred[i, c, 2], label[i, c, 1], label[i, c, 2], label[i, c, 3])
-                        distances.append(dist)
-                        if dist < 20:
-                            TP += 1
-                    else:
-                        TN += 1
+        sed_F1 = torchmetrics.F1Score(task='multilabel', num_labels=n_class)(torch.from_numpy(pred_sed), torch.from_numpy(label_sed).long())
+    distances = []
+    TP, FP, FN, TN = 0, 0, 0, 0
+    for i in range(pred.shape[0]): # sample
+        for c in range(n_class):  
+            if label_sed[i, c] == pred_sed_binary[i, c]:
+                if label_sed[i, c]: # positive sample
+                    dist = distance_between_cartesian_coordinates(pred[i, c, 0], pred[i, c, 1], pred[i, c, 2], label[i, c, 1], label[i, c, 2], label[i, c, 3])
+                    distances.append(dist)
+                    if dist < 20:
+                        TP += 1
                 else:
-                    if label_sed[i, c]:
-                        FN += 1
-                    else:
-                        FP += 1
-        precision = TP / (TP + FP + 1e-10)
-        recall = TP / (TP + FN + 1e-10)
-        F1 = 2 * precision * recall / (precision + recall + 1e-10)
-        return {
-            'precision': precision,
-            'recall': recall,
-            'F1': F1,
-            'distance': np.mean(distances) if len(distances) > 0 else 180,
-            'sed_precision': sed_precision,
-            'sed_recall': sed_recall,
-            'sed_F1': sed_F1
-        }
+                    TN += 1
+            else:
+                if label_sed[i, c]:
+                    FN += 1
+                else:
+                    FP += 1
+    precision = TP / (TP + FP + 1e-10)
+    recall = TP / (TP + FN + 1e-10)
+    F1 = 2 * precision * recall / (precision + recall + 1e-10)
+    return {
+        'precision': precision,
+        'recall': recall,
+        'F1': F1,
+        'distance': np.mean(distances) if len(distances) > 0 else 180,
+        # 'sed_precision': sed_precision,
+        # 'sed_recall': sed_recall,
+        'sed_F1': sed_F1,
+    }
 
-def Multi_ACCDOA_evaluation(pred, label, vis=False):
+def Multi_ACCDOA_evaluation(pred, label):
     '''
     permutation-aware loss
     pred: (batch, time, source*3(xyz))
@@ -94,59 +90,83 @@ def Multi_ACCDOA_evaluation(pred, label, vis=False):
     '''
     batch, time, N = label.shape
     num_source = N // 4
-    pred = pred.reshape(-1, num_source, 3); 
+    pred = pred.reshape(batch, time, num_source, 3); label = label.reshape(batch, time, num_source, 4)
     # compute all possible permutations and use the one with the smallest loss
     perms = list(itertools.permutations(range(num_source)))
-    best_metric_dict = {'distance': 180, 'precision': 0, 'recall': 0, 'F1': 0, 'sed_precision': 0, 'sed_recall': 0, 'sed_F1': 0}
-    for perm in perms:
-        pred_perm = pred[:, perm].reshape(batch, time, num_source*3)
-        metric_dict = ACCDOA_evaluation(pred_perm, label, vis=False)
-        if metric_dict['distance'] < best_metric_dict['distance']:
-            best_metric_dict = metric_dict
+    for p, l in zip(pred, label):
+        best_metric_dict = {'distance': 180, 'precision': 0, 'recall': 0, 'F1': 0, 'sed_F1': 0, 'sed_roc_auc': 0}
+        for perm in perms:
+            pred_perm = p[:, perm, :] # [time, source, 3]
+            label_perm = l[:, perm, :] # [time, source, 4]
+            pred_perm = pred_perm.reshape(1, time, num_source*3)
+            label_perm = label_perm.reshape(1, time, num_source*4)
+            metric_dict = ACCDOA_evaluation(pred_perm, label_perm)
+            if metric_dict['sed_F1'] > best_metric_dict['sed_F1']:
+                best_metric_dict = metric_dict
     return best_metric_dict
 
-def Gaussian_evaluation(pred, label, threshold=0.5, plot=False):
-    '''
-    pred: [batch, time, azimuth]
-    label: [batch, time, azimuth]
-    '''
-    # use threshold to select the peak
-    B, T, A = pred.shape
-    pred = pred.reshape(-1, pred.shape[-1])
-    label = label.reshape(-1, label.shape[-1])
-    
-    pred_peaks = []; label_peaks = []
-    for (p, l) in zip(pred, label):
-        pred_peak, _ = signal.find_peaks(p, height=threshold, distance=10)
-        label_peak, _ = signal.find_peaks(l, height=threshold, distance=10)
 
-        pred_peaks.append(pred_peak)
-        label_peaks.append(label_peak)
-    # calculate the distance between the peaks
-    min_distances = []
-    for l_peak, p_peak in zip(label_peaks, pred_peaks):
-        if len(l_peak) == 0:
-            if len(p_peak) == 0:
-                min_distances.append(0)
-            else:
-                min_distances.append(180)
-        else:
-            if len(p_peak) == 0:
-                min_distances.append(180)
-            else:
-                _min_distances = []
-                for l in l_peak:
-                    min_distance = 180
-                    for p in p_peak:
-                        # circular distance calucation, 360 = 0
-                        distance = min(abs(l - p), 360 - abs(l - p))
-                        if distance < min_distance:
-                            min_distance = distance
-                    _min_distances.append(min_distance)
-                min_distances.append(np.mean(_min_distances))
-    min_distances = np.array(min_distances).reshape(B, T)
-    if plot:
-        return min_distances, pred_peaks, label_peaks
-    else:
-        return min_distances
+def Guassian_evaluation(preds, labels, threshold=0.5, distance=10, vis=False):
+    '''
+    pred: [batch, time, 360]
+    label: [batch, time, 360]
+    '''
+
+    batch, time, _ = preds.shape
+    preds = preds.reshape(batch*time, -1)
+    labels = labels.reshape(batch*time, -1)        
+
+    pred_peaks = [signal.find_peaks(p, height=threshold, distance=distance)[0] for p in preds]
+    
+    # Initialize counts for TP, FP, FN
+    true_positives = 0
+    false_positives = 0
+    false_negatives = 0
+
+    for i in range(len(pred_peaks)):
+        # Get the true directions (where labels are 1)
+        true_indices = np.where(labels[i] == 1)[0]  # Indices of true directions
         
+        # Set to track if we found a correct prediction for each true direction
+        found_correct_prediction = np.zeros_like(true_indices, dtype=bool)
+
+        # Check each of the top-k predicted directions
+        for pred_index in pred_peaks[i]:
+            # Calculate angular error for each true direction
+            for j, true_index in enumerate(true_indices):
+                # Calculate the angular difference
+                error = np.abs(pred_index - true_index)
+                # Normalize the error to [0, 180]
+                angular_error = min(error, 360 - error)
+
+                # If the angular error is below the threshold, it's a true positive
+                if angular_error < threshold:
+                    true_positives += 1
+                    found_correct_prediction[j] = True  # Mark this true direction as found
+                    break  # No need to check further true directions for this prediction
+
+        # Count false negatives: true directions that were not found
+        false_negatives += np.sum(~found_correct_prediction)  # Count those not found
+
+    # Count false positives: any top-k prediction that does not match
+    false_positives = (len(pred_peaks) - true_positives)
+
+    # Calculate precision and recall
+    precision = true_positives / (true_positives + false_positives) if (true_positives + false_positives) > 0 else 0
+    recall = true_positives / (true_positives + false_negatives) if (true_positives + false_negatives) > 0 else 0
+
+    # Calculate F1 score
+    f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+
+    return {
+        'precision': precision,
+        'recall': recall,
+        'F1': f1_score,
+        'distance': 0,
+        'sed_F1': 0,
+        'sed_roc_auc': 0
+    }
+
+
+
+
