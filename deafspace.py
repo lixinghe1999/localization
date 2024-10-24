@@ -1,31 +1,44 @@
-from models.seldnet_model import SeldModel
-from models.deepbeam import BeamformerModel
+from utils.localization_dataset import Localization_dataset
 
 import numpy as np
 
 class DeafSpace():
     def __init__(self, ):
         pass
-    def init_localization(self, ):
-        self.localization_model = SeldModel(mic_channels=15, unique_classes=3)
-        def inference_localization(self, model, audio, source=1):
-            outputs = model(audio)
-            B, T, N = outputs.shape # [batch, time, source*3(xyz)]
-            assert source == N // 3
-            outputs = outputs.reshape(B, T, source, 3)
-            pred_sed = ((outputs**2).sum(dim=-1, keepdims=True)) ** 0.5 > 0.5  # [batch, time, source]
-            outputs = outputs * pred_sed
-            return outputs
-        return inference_localization
-    
-    def init_beamforming(self, ):
-        model = BeamformerModel(ch_in=4, synth_mid=64, synth_hid=96, block_size=16, kernel=3, synth_layer=4, synth_rep=4, lookahead=0)
-
-    def init_recognition(self, ):
-        pass
-    
-    def forward(self, audio, vision, imu):
-        return NotImplementedError
+    def track(self, localization, classification):
+        '''
+        localization: [T, 3(xyz) * 2 (tracks)]
+        classification: [T, C]
+        1. visulization
+        2. post-processing
+        '''
     
 if __name__ == '__main__':
     deafspace = DeafSpace()
+
+    config = {
+        "dataset": "smartglass",
+        "train_datafolder": "/home/lixing/localization/dataset/smartglass/NIGENS_1/train",
+        "test_datafolder": "/home/lixing/localization/dataset/smartglass/NIGENS_1/test",
+        "cache_folder": "cache/nigens_1/",
+        "encoding": "ACCDOA",
+        "duration": 5,
+        "frame_duration": 0.1,
+        "batch_size": 64,
+        "epochs": 50,
+        "model": "seldnet",
+        "label_type": "framewise",
+        "raw_audio": False,
+        'num_channel': 15,
+        'num_class': 1, # no need to do classification now
+        "pretrained": False,
+        "test": False,
+    }
+    print(config)
+
+    train_dataset = Localization_dataset(config['train_datafolder'], config)
+    train_dataset._cache_(config['cache_folder'] + '/train')
+    for data, audio, labels in train_dataset:
+        print(data.shape, audio.shape, labels.shape)
+        break
+    

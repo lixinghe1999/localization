@@ -6,13 +6,43 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from utils.public_dataset import STARSS23_dataset, Mobile_dataset
 from utils.localization_dataset import Localization_dataset
 from models.seldnet_model import SeldModel
-from utils.window_evaluation import ACCDOA_evaluation, Multi_ACCDOA_evaluation, Guassian_evaluation
-from utils.window_loss import ACCDOA_loss, Multi_ACCDOA_loss, Gaussian_loss
+from utils.window_evaluation import ACCDOA_evaluation, Multi_ACCDOA_evaluation
+from utils.window_loss import ACCDOA_loss, Multi_ACCDOA_loss
 import numpy as np
 import json
 import argparse
 import os
-import time
+def sed_vis(audio, output, label, save_path):
+    '''
+    audio: (batch, time)
+    output: (batch, time, xyz)
+    label: (batch, time, sed+xyz)
+    '''
+    import matplotlib.pyplot as plt
+    batch, time = audio.shape
+    batch, T, N = output.shape
+    num_source = N // 3
+    audio = audio/np.max(np.abs(audio), axis=-1, keepdims=True)
+    fig, axs = plt.subplots(batch//2, 2, figsize=(10, 10))
+
+    output = output.reshape(batch, T, num_source, 3)
+    label = label.reshape(batch, T, num_source, 4)
+    for i in range(batch):
+        plt_idx = [i//2, i%2]
+        output_sed = np.sqrt(np.sum(output[i]**2, axis=-1)) > 0.5
+        label_sed = label[i, :, :, 0] > 0.5
+        axs[plt_idx[0], plt_idx[1]].plot(audio[i])
+        # upsample the sed
+        output_sed = np.repeat(output_sed, time // T, axis=0)
+        label_sed = np.repeat(label_sed, time // T, axis=0)
+        axs[plt_idx[0], plt_idx[1]].plot(output_sed, label='output')
+        axs[plt_idx[0], plt_idx[1]].plot(label_sed, label='label')
+        axs[plt_idx[0], plt_idx[1]].legend()
+        axs[plt_idx[0], plt_idx[1]].set_ylim(-1.2, 1.2)
+    plt.savefig(save_path)
+
+
+
 
 class SeldNetLightningModule(pl.LightningModule):
     def __init__(self, config):
@@ -20,7 +50,7 @@ class SeldNetLightningModule(pl.LightningModule):
         self.config = config
         self.model = SeldModel(mic_channels=config['num_channel'], unique_classes=3 * config['num_class'], activation='tanh')
         self.criterion = ACCDOA_loss if config['encoding'] == 'ACCDOA' else Multi_ACCDOA_loss
-        self.evaluation = ACCDOA_evaluation if config['encoding'] == 'ACCDOA' else ACCDOA_evaluation
+        self.evaluation = ACCDOA_evaluation if config['encoding'] == 'ACCDOA' else Multi_ACCDOA_evaluation
 
     def forward(self, x):
         return self.model(x)
@@ -33,14 +63,21 @@ class SeldNetLightningModule(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        data, _, labels = batch
+        data, audio, labels = batch
         outputs = self(data)
-        update_labels = self.criterion(outputs, labels, training=False)
-        eval_dict = self.evaluation(outputs.cpu().numpy(), update_labels.cpu().numpy())
+        eval_dict = self.evaluation(outputs.cpu().numpy(), labels.cpu().numpy())
+
+        # if batch_idx == 0:
+        #     save_path = trainer.logger.save_dir
+        #     version = trainer.logger.version
+        #     auto_defined_path = f"{save_path}/lightning_logs/version_{version}/{self.global_step}.png"
+        #     sed_vis(audio.cpu().numpy(), outputs.cpu().numpy(), labels.cpu().numpy(), save_path=auto_defined_path)
+
 
         self.log('val_sed_F1', eval_dict['sed_F1'])
-
         self.log('val_F1', eval_dict['F1'])
+        self.log('val_precision', eval_dict['precision'])
+        self.log('val_recall', eval_dict['recall'])
         self.log('val_distance', eval_dict['distance'])
         return eval_dict
 
@@ -54,14 +91,14 @@ if __name__ == '__main__':
 
     config = {
         "dataset": "smartglass",
-        "train_datafolder": "/home/lixing/localization/dataset/smartglass/FUSS_Reverb_2/train",
-        "test_datafolder": "/home/lixing/localization/dataset/smartglass/FUSS_Reverb_2/test",
-        "cache_folder": "cache/fuss_2/",
+        "train_datafolder": "/home/lixing/localization/dataset/smartglass/AudioSet_2/train",
+        "test_datafolder": "/home/lixing/localization/dataset/smartglass/AudioSet_2/test",
+        "cache_folder": "cache/audioset_2/",
         "encoding": "Multi_ACCDOA",
         "duration": 5,
         "frame_duration": 0.1,
-        "batch_size": 64,
-        "epochs": 50,
+        "batch_size": 16,
+        "epochs": 10,
         "model": "seldnet",
         "label_type": "framewise",
         "raw_audio": False,
@@ -70,7 +107,6 @@ if __name__ == '__main__':
         "pretrained": False,
         "test": False,
     }
-    print(config)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 

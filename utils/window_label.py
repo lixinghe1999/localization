@@ -88,15 +88,5 @@ def Multi_ACCDOA_label(labels, config):
     label_mat = label_mat.reshape(-1, num_source * 4)
     return label_mat
 
-def Gaussian_label(labels, config):
-    _nb_label_frames = config['duration'] * 10
-    label_mat = np.zeros((_nb_label_frames, 360))
-    x = np.arange(360)
-    for frame, _, _, azimuth, elevation, _  in labels:
-        if frame < _nb_label_frames:
-            gaussian = np.exp(-((x - azimuth) ** 2) / (2 * 10 ** 2))
-            label_mat[frame] += gaussian
-            label_mat[frame] /= np.max(label_mat[frame])    
-    return label_mat
 
 

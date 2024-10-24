@@ -167,7 +167,7 @@ class ISM_simulator():
         os.makedirs(meta_folder, exist_ok=True)
 
         if num_data is None:
-            num_data = len(dataset) // max_source
+            num_data = len(dataset)
         else: 
             num_data = num_data
         for i in tqdm(range(num_data)):

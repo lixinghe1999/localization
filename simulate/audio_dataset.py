@@ -4,8 +4,115 @@ DHH_sounds = ["Microwave", "Hazard alarm", "Baby crying", "Alarm clock", "Cutler
 from torch.utils.data import Dataset, ConcatDataset, random_split
 import os
 import numpy as np
-import pandas as pd
 import librosa
+import pandas as pd
+
+class AudioSet_dataset(Dataset):
+    def __init__(self, root='audioset', vision=True, split='eval', sr=16000, duration=10, frame_duration=0.1, label_level='clip'):
+        self.image_dir = os.path.join(root, 'audioset_{}_strong_images'.format(split))
+        self.audio_dir = os.path.join(root, 'audioset_{}_strong_audios'.format(split))
+        self.embeddings_dir = os.path.join(root, 'audioset_{}_strong_embeddings'.format(split))
+        label_file = os.path.join(root, 'audioset_{}_strong.tsv'.format(split))
+
+        label = pd.read_csv(label_file, sep='\t')
+        labels = {}
+        self.label_map = {}
+        for row in label.itertuples():
+            segment_id = row.segment_id 
+            if row.label not in self.label_map:
+                self.label_map[row.label] = len(self.label_map)
+            if segment_id not in labels:
+                labels[segment_id] = []
+            labels[segment_id].append([row.start_time_seconds, row.end_time_seconds, row.label])
+        self.num_classes = len(self.label_map)
+        print('Number of classes:', self.num_classes)
+
+        ontology = pd.read_csv(os.path.join(root, 'mid_to_display_name.tsv'), sep='\t', names=['mid', 'display_name'])
+        self.ontology = {}
+        for row in ontology.itertuples():
+            self.ontology[row.mid] = row.display_name
+        self.class_map = ['unknown'] * self.num_classes
+        for k in self.label_map:
+            cls_idx = self.label_map[k]
+            if k in self.ontology:
+                self.class_map[cls_idx] = self.ontology[k]
+
+        self.sr = sr
+        self.duration = duration
+        self.frame_duration = frame_duration
+        self.vision = vision
+        self.label_level = label_level
+
+        # clip-level
+        self.clip_labels = []; self.frame_labels = []
+        self.num_frames_per_clip = int(duration / self.frame_duration)
+        for segment_id in labels:
+            clip_label = np.zeros(self.num_classes, dtype=np.float32)
+            frame_label = np.zeros((self.num_frames_per_clip, self.num_classes), dtype=np.float32)
+            for start, end, label in labels[segment_id]:
+                clip_label[self.label_map[label]] = 1
+                start_frame = int(start/ self.frame_duration)
+                end_frame = int(end/ self.frame_duration)
+                frame_label[start_frame:end_frame, self.label_map[label]] = 1
+            self.frame_labels.append([segment_id, frame_label])
+            self.clip_labels.append([segment_id, clip_label])
+    def filter_modal(self, modal):
+        keep_index = []
+        for i in range(self.__len__()):
+            segment_id, _ = self.clip_labels[i]
+
+            audio_file = os.path.join(self.audio_dir, segment_id + '.flac')
+            image_file = os.path.join(self.image_dir, segment_id + '.jpg')
+            embeddings_file = os.path.join(self.embeddings_dir, segment_id + '.npy')
+            if 'audio' in modal and not os.path.exists(audio_file):
+                continue
+            if 'image' in modal and not os.path.exists(image_file):
+                continue
+            if 'embeddings' in modal and not os.path.exists(embeddings_file):
+                continue
+            keep_index.append(i)
+        self.clip_labels = [self.clip_labels[i] for i in keep_index]
+        self.frame_labels = [self.frame_labels[i] for i in keep_index]
+        
+    def __len__(self):
+        return len(self.clip_labels)
+
+    def __getitem__(self, idx): 
+        if self.label_level == 'frame':
+            segment_id, label = self.frame_labels[idx]
+        else:
+            segment_id, label = self.clip_labels[idx]
+
+        audio_file = os.path.join(self.audio_dir, segment_id + '.flac')
+        # duration = librosa.get_duration(path=audio_file)
+        audio, _ = librosa.load(audio_file, sr=self.sr, duration=self.duration)
+        if len(audio) < self.duration * self.sr:
+            audio = np.pad(audio, (0, self.duration*self.sr - len(audio)))
+        else:
+            audio = audio[:self.duration*self.sr]
+        if self.vision:
+            # image_file = os.path.join(self.image_dir, segment_id + '.jpg')
+            embeddings_file = os.path.join(self.embeddings_dir, segment_id + '.npy')
+
+            # image = np.array(Image.open(image_file))
+            image = np.load(embeddings_file).astype(np.float32)
+
+            return (audio, image), label
+        else:
+            return audio, label
+
+class AudioSet_dataset_simulation(Dataset):
+    def __init__(self, root='../dataset/audioset', split='train', sr=16000):
+        self.dataset = AudioSet_dataset(root, split=split, vision=False, label_level='frame')
+        self.dataset.filter_modal(['audio',])
+    def __len__(self):
+        return len(self.dataset)
+    def __getitem__(self, idx):
+        audio, label = self.dataset.__getitem__(idx)
+        inactive_frame = np.sum(label, axis=1) == 0
+        active_frame = np.sum(label, axis=1) >= 1
+
+        return audio, 0, active_frame
 
 class NIGENS_dataset(Dataset):
     def __init__(self, root='NIGENS', split='train', sr=16000):
@@ -46,8 +153,6 @@ class NIGENS_dataset(Dataset):
         class_idx = self.class_names.index(class_name)
         return audio, class_idx, active_frame
     
-
-
 class TIMIT_dataset(Dataset):
     def __init__(self, root='TIMIT', split='TRAIN', sr=16000):
         self.root_dir = os.path.join(root, split)
@@ -91,42 +196,7 @@ class ESC50(Dataset):
         audio = librosa.load(file_name, sr=self.sr)[0]
         class_idx = int(file_name[:-4].split('-')[-1])
         return audio, class_idx, (0, 5)
-class FUSS_Reverb(Dataset):
-    def __init__(self, root='FUSS_reverb', split='TRAIN', sr=16000):
-        root = os.path.join(root, split)
-        self.data = []
-        self.sr = sr
-        audio_list = os.listdir(root)
-        audio_list = [audio for audio in audio_list if audio.endswith('sources')]
 
-        self.data = []; self.annotation = []
-        for audio in audio_list:
-            source_dir = os.path.join(root, audio)
-            source_list = os.listdir(source_dir)
-            source_list = [source for source in source_list if source.startswith('foreground')]
-
-            example_name = audio.split('_')[0]
-            active_txt = example_name + '.txt'
-            active_txt = os.path.join(root, active_txt)
-            with open(active_txt, 'r') as f:
-                lines = f.readlines()
-
-            for i, source in enumerate(source_list):
-                if source.startswith('foreground'):
-                    self.data.append(os.path.join(source_dir, source))
-                    self.annotation.append(lines[i].strip())
-
-        print(len(self.data), len(self.annotation))
-    def __len__(self):
-        return len(self.data)
-    def __getitem__(self, idx):
-        file_name = self.data[idx]
-        annotation = self.annotation[idx]
-        start, end, _ = annotation.split()
-        start, end = float(start), float(end)
-
-        audio = librosa.load(file_name, sr=self.sr)[0]
-        return audio, 0, (start, end)
 
 def dataset_parser(dataset, relative_path):
     if dataset == 'TIMIT':
@@ -137,19 +207,19 @@ def dataset_parser(dataset, relative_path):
         root = os.path.join(relative_path, 'ESC-50-master')
         train_dataset = ESC50(root=root, split='TRAIN')
         test_dataset = ESC50(root=root, split='TEST')
-    elif dataset == 'FUSS_Reverb':
-        root = os.path.join(relative_path, 'ssdata_reverb')
-        train_dataset = FUSS_Reverb(root=root, split='train')
-        test_dataset = FUSS_Reverb(root=root, split='eval')
     elif dataset == 'NIGENS':
         root = os.path.join(relative_path, 'NIGENS')
         train_dataset = NIGENS_dataset(root=root, split='train')
         test_dataset = NIGENS_dataset(root=root, split='test')
+    elif dataset == 'AudioSet':
+        train_dataset = AudioSet_dataset_simulation(split='train')
+        test_dataset = AudioSet_dataset_simulation(split='eval')
     return train_dataset, test_dataset
 
 if __name__ == '__main__':
-    # train_dataset, test_dataset = dataset_parser('FUSS_Reverb', '.')
+    train_dataset, test_dataset = dataset_parser('AudioSet', '.')
 
     # data = train_dataset[0]
-    dataset = NIGENS_dataset()
-    data = dataset[0]
+    # dataset = NIGENS_dataset()
+    # data = dataset[0]
+

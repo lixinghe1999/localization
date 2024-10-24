@@ -1,12 +1,5 @@
 import torch
 import itertools
-def Gaussian_loss(pred, labels):
-    '''
-    pred: (batch, time, 360)
-    labels: (batch, time, 360)
-    '''
-    loss = torch.nn.functional.mse_loss(pred, labels)
-    return loss
 
 def Region_loss(pred, labels):
     '''
@@ -16,7 +9,7 @@ def Region_loss(pred, labels):
     loss = torch.nn.functional.binary_cross_entropy(pred, labels)
     return loss
 
-def ACCDOA_loss(pred, labels, implicit=True):
+def ACCDOA_loss(pred, labels, implicit=True, training=True):
     if implicit:
         '''
         pred: (batch, time, nb_class * 3)

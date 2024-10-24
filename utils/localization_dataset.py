@@ -1,5 +1,5 @@
 from torch.utils.data import Dataset, DataLoader
-from .window_label import ACCDOA_label, Multi_ACCDOA_label, Region_label, Gaussian_label
+from .window_label import ACCDOA_label, Multi_ACCDOA_label, Region_label
 from .window_feature import spectrogram, gcc_mel_spec 
 import os
 import librosa
@@ -143,7 +143,7 @@ class Localization_dataset(Dataset):
                     np.save(os.path.join(cache_folder, f'{i * batch_size + j}.npy'), data[j])
         self.cache_folder = cache_folder
     
-    def __getitem__(self, index, encoding=True):
+    def __getitem__(self, index):
         '''
         label = [frame, class, source/instance, azimuth, elevation, distance]
         '''

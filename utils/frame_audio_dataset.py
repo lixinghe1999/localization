@@ -12,7 +12,7 @@ import json
 
 
 class AudioSet_dataset(Dataset):
-    def __init__(self, root='audioset', vision=True, split='eval', sr=16000, duration=10, frame_duration=1, label_level='clip'):
+    def __init__(self, root='audioset', vision=True, split='eval', sr=16000, duration=10, frame_duration=0.1, label_level='clip'):
         self.image_dir = os.path.join(root, 'audioset_{}_strong_images'.format(split))
         self.audio_dir = os.path.join(root, 'audioset_{}_strong_audios'.format(split))
         self.embeddings_dir = os.path.join(root, 'audioset_{}_strong_embeddings'.format(split))
@@ -82,7 +82,7 @@ class AudioSet_dataset(Dataset):
         return len(self.clip_labels)
 
     def __getitem__(self, idx): 
-        if self.label_level  == 'frame':
+        if self.label_level == 'frame':
             segment_id, label = self.frame_labels[idx]
         else:
             segment_id, label = self.clip_labels[idx]
@@ -106,22 +106,22 @@ class AudioSet_dataset(Dataset):
             return audio, label
 
 def dataset_sample(dataset):
-    home_label = ["/m/06h7j", "/m/07qv_x_", "/m/07pbtc8", "/m/03cczk", "/m/0l15bq", "/m/053hz1", "/m/03qtwd", "/t/dd00013", "/t/dd00135"]
-    home_label += ["/m/0bt9lr", "/m/01yrx"]
     count = 0
-    for clip_label in dataset.clip_labels:
-        segment_id, label = clip_label
-        num_class = sum(label)
-        # print('Segment id:', segment_id, label.shape, 'Number of classes:', num_class)
-        if num_class == 1:
-            # audio_file = os.path.join(dataset.audio_dir, segment_id + '.flac')
-            # os.system('cp {} dataset/single_label_clips'.format(audio_file))
-            class_idx = np.argmax(label)
-            label = dataset.label_map[class_idx]
-            if label in home_label:
-                count += 1
-                print('Segment id:', segment_id, label)
+    inactive_frames = []; single_class_frames = []; overlap_frames = []
+    for segment_id, label in dataset.frame_labels:
+        print(segment_id, label.shape)
+        inactive_frame = np.sum(label, axis=1) == 0
+        single_class_frame = np.sum(label, axis=1) == 1
+        overlap_frame = np.sum(label, axis=1) > 1
+        print(np.mean(inactive_frame), np.mean(single_class_frame), np.mean(overlap_frame))
 
+        inactive_frames.append(np.mean(inactive_frame))
+        single_class_frames.append(np.mean(single_class_frame))
+        overlap_frames.append(np.mean(overlap_frame))
+
+    print('Inactive frames:', np.mean(inactive_frames))
+    print('Single class frames:', np.mean(single_class_frames))
+    print('Overlap frames:', np.mean(overlap_frames))
     print('Number of single label clips:', count)
 if __name__ == '__main__':
     dataset = AudioSet_dataset('dataset/audioset', split='eval', vision=False, label_level='clip')
