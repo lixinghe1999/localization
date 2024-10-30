@@ -3,41 +3,42 @@ label for every 0.1s window (by default)
 '''
 import numpy as np
 
-def doa2idx(azimuth, elevation):
+def azimuth2idx(azimuth):
     # [front, left, right, back, up, down]
-    if elevation >= -35 and elevation <= 35:
-        if azimuth >= -45 and azimuth <= 45:
-            return 0
-        elif azimuth >= 45 and azimuth <= 135:
-            return 1
-        elif azimuth >= -135 and azimuth <= -45:
-            return 2
-        else:
-            return 3
+    if azimuth >= -45 and azimuth <= 45:
+        return 0
+    elif azimuth >= 45 and azimuth <= 135:
+        return 1
+    elif azimuth >= -135 and azimuth <= -45:
+        return 2
     else:
-        if elevation > 35:
-            return 4
-        else:
-            return 5
+        return 3
+def elevation2idx(elevation):
+    if elevation >= 0:
+        return 4
+    else:
+        return 5
         
 def dist2idx(distance):
     if distance <= 1.5:
-        return 0
+        return 6
     else:
-        return 1
+        return 7
 
 def Region_label(labels, config):
     total_num_frames = int(config['duration'] / config['frame_duration'])
     num_class = config['num_class']
 
-    label_window = np.zeros((total_num_frames, 8 + num_class))
+    label_window = np.zeros((total_num_frames, 8))
     for frame, class_idx, _, azimuth, elevation, distance in labels:
-        doa_idx = doa2idx(azimuth, elevation)
+        azimuth_idx = azimuth2idx(azimuth)
+        elevation_idx = elevation2idx(elevation)
         dist_idx = dist2idx(distance)        
         frame = int(frame * 0.1 / config['frame_duration'])
-        label_window[frame, doa_idx] = 1
-        label_window[frame, 6 + dist_idx] = 1
-        label_window[frame, 8 + int(class_idx)] = 1
+        label_window[frame, azimuth_idx] = 1
+        label_window[frame, elevation_idx] = 1
+        label_window[frame, dist_idx] = 1
+        # label_window[frame, 8 + int(class_idx)] = 1
     return label_window
 
 
@@ -71,21 +72,25 @@ def Multi_ACCDOA_label(labels, config):
     config
     sed: bool, if True, do sed+doa, else doa only
     '''
-    num_source = 2
+    num_source = 3
     _nb_label_frames = config['duration'] * 10
-    label_mat = np.zeros((_nb_label_frames, num_source, 4))
-
-    for frame, _, source_idx, azimuth, elevation, _  in labels:
+    label_mat = np.zeros((_nb_label_frames, num_source, 5))
+    frame_source_count = np.zeros((_nb_label_frames))
+    for frame, class_idx, _, azimuth, elevation, _  in labels:
         if frame < _nb_label_frames:
             x = np.cos(np.radians(azimuth)) * np.cos(np.radians(elevation))
             y = np.sin(np.radians(azimuth)) * np.cos(np.radians(elevation))
             z = np.sin(np.radians(elevation))
 
+            source_idx = int(frame_source_count[frame])
             label_mat[frame, source_idx, 0] = 1
             label_mat[frame, source_idx, 1] = x
             label_mat[frame, source_idx, 2] = y
             label_mat[frame, source_idx, 3] = z
-    label_mat = label_mat.reshape(-1, num_source * 4)
+            label_mat[frame, source_idx, 4] = class_idx
+
+            frame_source_count[frame] += 1
+    label_mat = label_mat.reshape(-1, num_source * 5)
     return label_mat
 
 

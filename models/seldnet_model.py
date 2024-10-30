@@ -55,6 +55,7 @@ class MultiHeadSelfAttention(nn.Module):
             x = x + x_attn_in
             x = self.layer_norm_list[mhsa_cnt](x)
         return x
+
 params = dict(
         dropout_rate=0.05,           # Dropout rate, constant for all layers
         nb_cnn2d_filt=128,           # Number of CNN nodes, constant for each layer
@@ -132,6 +133,59 @@ class SeldModel(torch.nn.Module):
         doa = self.activation(x)
         return doa
 
+class SeldModel_Mobile(SeldModel):
+    def __init__(self, mic_channels=10, unique_classes=9, mel_bins=64, t_pool_size=[5, 1, 1], activation='sigmoid',
+                  params=params):
+        '''
+        mic_chanels: 10 - 4mics, 3 - 2mics
+        unique_classes: 9 - 3 classes * 3 axes for fine-grained, 6 - 4+2 (doa + distance)
+        '''
+        super().__init__(mic_channels, unique_classes, mel_bins, t_pool_size, activation, params) # Inherit from SeldModel
+
+        self.imu_conv_block_list = nn.ModuleList()
+        # the sampling rate of imu is 50Hz, so we need to same downsample as the audio (suppose the window is 0.02s)
+
+        self.imu_proj = nn.Linear(6, params['nb_cnn2d_filt'])
+        transformer = nn.TransformerEncoderLayer(d_model=params['nb_cnn2d_filt'], nhead=params['nb_heads'], dim_feedforward=params['fnn_size'], dropout=params['dropout_rate'])
+        self.imu_transformer = nn.TransformerEncoder(transformer, num_layers=4)
+        self.imu_norm = nn.GroupNorm(2, 6)
+        self.imu_audio_proj = nn.Linear(params['nb_cnn2d_filt'], params['nb_cnn2d_filt'])
+
+
+    def forward(self, x, imu):
+        """
+        input: 
+        audio - (batch_size, mic_channels, time_steps, mel_bins)
+        imu - (batch_size, time_steps, 6)
+        output:
+        doa - (batch_size, time_steps, unique_classes)
+        """
+        for conv_cnt in range(len(self.conv_block_list)):
+            x = self.conv_block_list[conv_cnt](x)
+
+        imu = self.imu_norm(imu.transpose(1, 2).contiguous()).transpose(1, 2).contiguous()
+        imu = self.imu_proj(imu)
+        imu = self.imu_transformer(imu)
+        # max_pooling by 50
+        imu = F.max_pool1d(imu.transpose(1, 2).contiguous(), kernel_size=50).transpose(1, 2).contiguous()
+
+        x = x.transpose(1, 2).contiguous()
+        x = x.view(x.shape[0], x.shape[1], -1).contiguous()
+        (x, _) = self.gru(x)
+        x = torch.tanh(x)
+        x = x[:, :, x.shape[-1]//2:] * x[:, :, :x.shape[-1]//2]
+
+        x = x + self.imu_audio_proj(imu)
+
+        pos_embedding = self.pos_embedder(x)
+        x = x + pos_embedding
+        
+        x = self.multiheadattention(x)
+       
+        for fnn_cnt in range(len(self.fnn_list_doa)):
+            x = self.fnn_list_doa[fnn_cnt](x)
+        doa = self.activation(x)
+        return doa
 
 if __name__ == '__main__':
     

@@ -35,22 +35,20 @@ class Localization_dataset(Dataset):
             self.encoding = Multi_ACCDOA_label
         elif self.encoding == 'Region':
             self.encoding = Region_label
-        elif self.encoding == 'Gaussian':
-            self.encoding = Gaussian_label
 
         self.root_dir = root_dir
         self.data_folder = os.path.join(self.root_dir, 'audio')
+        self.motion_folder = os.path.join(self.root_dir, 'imu')
         self.label_folder = os.path.join(self.root_dir, 'meta')
         self.labels = os.listdir(self.label_folder)
         # make sure 
         self.sr = sr
         self.duration = self.config['duration']
         self.frame_duration = self.config['frame_duration']
-        self.class_names = ['alarm', 'baby', 'blender', 'cat', 'crash', 'dishes', 'dog', 'engine', 'fire', 'footsteps', 
-                            'glassbreak', 'gunshot', 'knock', 'phone', 'piano', 'scream', 'speech', 'water']
-
+        self.class_names = config['class_names']
         self.raw_audio = self.config['raw_audio']
         self.label_type = self.config['label_type']
+        self.motion = self.config['motion']
 
         self.crop_dataset()
 
@@ -164,6 +162,16 @@ class Localization_dataset(Dataset):
             spec = spectrogram(audio)
             data = gcc_mel_spec(spec).astype(np.float32)
             audio = audio[0]
-        return data, audio, label
+        if self.motion:
+            imu_name = os.path.join(self.motion_folder, label_name.replace('.txt', '.npy'))
+            imu = np.load(imu_name).astype(np.float32)
+            start_frame_imu = int(start_frame * 5) # 50Hz
+            imu = imu[start_frame_imu:start_frame_imu + int(self.duration * 50)]
+            if imu.shape[0] < int(self.duration * 50):
+                imu = np.pad(imu, ((0, int(self.duration * 50 - imu.shape[0])), (0, 0)))
+        else:
+            imu = np.zeros((int(self.duration * 50), 6)).astype(np.float32)
+        
+        return {'spatial_feature': data, 'audio': audio, 'label': label, 'imu': imu}
             
         

@@ -12,9 +12,10 @@ import json
 
 
 class AudioSet_dataset(Dataset):
-    def __init__(self, root='audioset', vision=True, split='eval', sr=16000, duration=10, frame_duration=0.1, label_level='clip'):
+    def __init__(self, root='audioset', modality=[], split='eval', sr=16000, duration=10, frame_duration=0.1, label_level='clip'):
         self.image_dir = os.path.join(root, 'audioset_{}_strong_images'.format(split))
         self.audio_dir = os.path.join(root, 'audioset_{}_strong_audios'.format(split))
+        self.text_dir = os.path.join(root, 'audioset_{}_strong_text'.format(split))
         self.embeddings_dir = os.path.join(root, 'audioset_{}_strong_embeddings'.format(split))
         label_file = os.path.join(root, 'audioset_{}_strong.tsv'.format(split))
 
@@ -44,7 +45,7 @@ class AudioSet_dataset(Dataset):
         self.sr = sr
         self.duration = duration
         self.frame_duration = frame_duration
-        self.vision = vision
+        self.modality = modality
         self.label_level = label_level
 
         # clip-level
@@ -60,6 +61,8 @@ class AudioSet_dataset(Dataset):
                 frame_label[start_frame:end_frame, self.label_map[label]] = 1
             self.frame_labels.append([segment_id, frame_label])
             self.clip_labels.append([segment_id, clip_label])
+    
+        self.filter_modal(modality)
     def filter_modal(self, modal):
         keep_index = []
         for i in range(self.__len__()):
@@ -68,13 +71,18 @@ class AudioSet_dataset(Dataset):
             audio_file = os.path.join(self.audio_dir, segment_id + '.flac')
             image_file = os.path.join(self.image_dir, segment_id + '.jpg')
             embeddings_file = os.path.join(self.embeddings_dir, segment_id + '.npy')
+            text_file = os.path.join(self.text_dir, segment_id + '.json')
             if 'audio' in modal and not os.path.exists(audio_file):
                 continue
             if 'image' in modal and not os.path.exists(image_file):
                 continue
             if 'embeddings' in modal and not os.path.exists(embeddings_file):
                 continue
+            if 'text' in modal and not os.path.exists(text_file):
+                continue
             keep_index.append(i)
+        print('Number of samples before filtering:', len(self.clip_labels))
+        print('Number of samples after filtering:', len(keep_index))
         self.clip_labels = [self.clip_labels[i] for i in keep_index]
         self.frame_labels = [self.frame_labels[i] for i in keep_index]
         
@@ -82,6 +90,7 @@ class AudioSet_dataset(Dataset):
         return len(self.clip_labels)
 
     def __getitem__(self, idx): 
+        output_dict = {}
         if self.label_level == 'frame':
             segment_id, label = self.frame_labels[idx]
         else:
@@ -94,16 +103,22 @@ class AudioSet_dataset(Dataset):
             audio = np.pad(audio, (0, self.duration*self.sr - len(audio)))
         else:
             audio = audio[:self.duration*self.sr]
-        if self.vision:
-            # image_file = os.path.join(self.image_dir, segment_id + '.jpg')
+        output_dict['audio'] = audio
+        output_dict['label'] = label
+        if 'embeddings' in self.modality:
             embeddings_file = os.path.join(self.embeddings_dir, segment_id + '.npy')
-
-            # image = np.array(Image.open(image_file))
-            image = np.load(embeddings_file).astype(np.float32)
-
-            return (audio, image), label
-        else:
-            return audio, label
+            embeddings = np.load(embeddings_file).astype(np.float32)
+            output_dict['embeddings'] = embeddings
+        if 'image' in self.modality:
+            image_file = os.path.join(self.image_dir, segment_id + '.jpg')
+            image = np.array(Image.open(image_file))
+            output_dict['image'] = image
+        if 'text' in self.modality:
+            text_file = os.path.join(self.text_dir, segment_id + '.json')
+            with open(text_file, 'r') as f:
+                text = json.load(f)
+            output_dict['text'] = text
+        return output_dict
 
 def dataset_sample(dataset):
     count = 0
@@ -124,10 +139,15 @@ def dataset_sample(dataset):
     print('Overlap frames:', np.mean(overlap_frames))
     print('Number of single label clips:', count)
 if __name__ == '__main__':
-    dataset = AudioSet_dataset('dataset/audioset', split='eval', vision=False, label_level='clip')
-    dataset.filter_modal(['audio',])
+    dataset = AudioSet_dataset('dataset/audioset', split='eval', modality=['audio', 'embeddings', 'text'], label_level='clip')
     print(len(dataset))
-    dataset_sample(dataset)
+    data = dataset[9]
+    print(data.keys())
+    print(data['audio'].shape)
+    print(data['label'].shape)
+    print(data['embeddings'].shape)
+    print(data['text'])
+    # dataset_sample(dataset)
 
 
 

@@ -7,51 +7,41 @@ import pandas as pd
 import datetime
 import matplotlib.pyplot as plt
 import scipy.signal as signal
+import scipy.io.wavfile as wavfile
+
 
 from silero_vad import load_silero_vad, read_audio, get_speech_timestamps
 
-def azimuth_parser(azimuth):
-    azimuth = int(azimuth)
-    if azimuth == 0:
-        return 0
-    elif azimuth == 1:
-        return 90
-    elif azimuth == 2:
-        return -90
-    else:
-        return 180
+def direction_parser(direction):
+    direction = int(direction)
     
+    if direction == 0:
+        return (0, -30)
+    elif direction == 1:
+        return (90, -30)
+    elif direction == 2:
+        return (180, -30)
+    elif direction == 3:
+        return (270, -30)
+    elif direction == 4:
+        return (0, 30)
+    elif direction == 5:
+        return (90, 30)
+    elif direction == 6:
+        return (180, 30)
+    elif direction == 7:
+        return (270, 30)
+
 def distance_parser(distance):
     distance = int(distance)
     if distance == 0:
-        return 0.5
+        return 1
     elif distance == 1:
-        return 1.5
+        return 2
     else:
         return 3
 
-def get_sound_timestamps(audio):
-    frame_length = int(sr * 0.5)
-    audio_frame = librosa.util.frame(x=audio, frame_length=frame_length, hop_length=frame_length, axis=0)
-    print('audio frame shape:', audio_frame.shape)
-    energy = np.mean(audio_frame ** 2, axis=1)
-    energy = energy / np.max(energy)
-    active_frame = energy > 0.02
-    print('active frame:', np.sum(active_frame), 'total frame:', len(active_frame))
-
-    # convert to timestamp: [[start, end], [...]]
-    sound_timestamps = []
-    start = 0
-    for i in range(1, len(active_frame)):
-        if active_frame[i] and not active_frame[i-1]:
-            start = i
-        if not active_frame[i] and active_frame[i-1]:
-            end = i
-            sound_timestamps.append({'start': start, 'end': end})
-    return sound_timestamps
-
-def pcm_to_wav(pcm_file, wav_file, sample_rate=48000, num_channels=1):
-    import scipy.io.wavfile as wavfile
+def pcm_to_wav(pcm_file, num_channels=1):
     # Load PCM data
     with open(pcm_file, 'rb') as f:
         pcm_data = f.read()
@@ -64,12 +54,36 @@ def pcm_to_wav(pcm_file, wav_file, sample_rate=48000, num_channels=1):
     # Reshape if stereo
     if num_channels > 1:
         pcm_array = pcm_array.reshape((-1, num_channels))
-
     # Write to WAV file
-    wavfile.write(wav_file, sample_rate, pcm_array)
     return pcm_array
 
-datadir = 'dataset/earphone/20241023'
+def get_chirp(sample_rate=44100, duration=5.0, min_freq=100, max_freq=8000):
+    import numpy as np
+    from scipy.io import wavfile
+    t = np.linspace(0, duration, int(duration * sample_rate), False)
+    chirp = np.sin(2 * np.pi * (min_freq + (max_freq - min_freq) * t / duration) * t)
+    return chirp
+
+def chirp_preamble(mono_audio, plot=False):
+    print('start matching the chirp, may take times')
+    chirp_template = get_chirp(sample_rate=48000, duration=1, min_freq=2000, max_freq=4000)
+    corr = np.correlate(mono_audio[:], chirp_template[:], mode='valid')
+    peaks = signal.find_peaks(corr, height=50, distance=40000)[0]
+    assert len(peaks) == 1
+    if plot:    
+        fig, axs = plt.subplots(2, 1)
+        axs[0].plot(corr)
+        for peak in peaks:
+            axs[0].axvline(peak, color='r')
+
+        axs[1].plot(mono_audio)
+        for peak in peaks:
+            axs[1].axvline(peak, color='r')
+            axs[1].axvline(peak + 48000, color='r')
+        plt.savefig('test.png')
+    return peaks[0]
+
+datadir = 'dataset/earphone/lixing'
 data_dir = os.path.join(datadir, 'data')
 log_dir = os.path.join(datadir, 'log')
 
@@ -83,18 +97,14 @@ audios = [data for data in datas if data.endswith('.pcm')]; audios.sort()
 imus = [data for data in datas if data.endswith('.csv')]; imus.sort()
 logs = os.listdir(log_dir); logs.sort()
 
-
-def get_chirp(sample_rate=44100, duration=5.0, min_freq=100, max_freq=8000):
-    import numpy as np
-    from scipy.io import wavfile
-    t = np.linspace(0, duration, int(duration * sample_rate), False)
-    chirp = np.sin(2 * np.pi * (min_freq + (max_freq - min_freq) * t / duration) * t)
-    return chirp
-
-chirp_template = get_chirp(sample_rate=48000, duration=1, min_freq=2000, max_freq=4000)
-
 for audio, imu, log in zip(audios, imus, logs):
     print('processing:', audio, imu, log)
+
+    meta, time = audio[:-4].split('-')
+    user, distance, direction, location, sound = meta.split('_')
+    azimuth, elevation = direction_parser(direction)
+    distance = distance_parser(distance)
+
     imu_data = np.loadtxt(os.path.join(data_dir, imu), delimiter=',', skiprows=1, usecols=(0, 1, 2, 3, 4, 5, 6,))
     imu_timestamp = np.loadtxt(os.path.join(data_dir, imu), delimiter=',', skiprows=1, usecols=(7,), dtype=str)
     imu_timestamp = [datetime.datetime.strptime(time, '%Y%m%d_%H%M%S_%f') for time in imu_timestamp]
@@ -102,46 +112,72 @@ for audio, imu, log in zip(audios, imus, logs):
     imu_timestamp = [(time - imu_timestamp[0]).total_seconds() for time in imu_timestamp]
     imu_sr = len(imu_timestamp)/imu_timestamp[-1]
     imu_data = librosa.resample(imu_data[:, :6].T, orig_sr=imu_sr, target_sr=50).T
+
+    stereo_audio = pcm_to_wav(os.path.join(data_dir, audio), num_channels=2)
+    mono_audio = stereo_audio[:, 0] / 2 ** 15
+
+    reference_dataset = 'simulate/NIGENS'
+    log = pd.read_csv(os.path.join(log_dir, log), sep=' ')
+
+    recording_start = 0
+    sound_event_list = []
+    for (i, row) in log.iterrows():
+        # each row: left_audio, right_audio, start, end
+        left_audio = row['left_audio']; right_audio = row['right_audio']
+        start = float(row['start']); end = float(row['end'])
+
+        annotation = left_audio.rstrip()
+        base_name = annotation.split('/')[-1].replace('\\', '/')
+
+        ref_audio = os.path.join(reference_dataset, base_name)
+        annotation = os.path.join(reference_dataset, base_name) + '.txt'
+        annotation = pd.read_csv(annotation, sep='\t', names=['start', 'end'])
+
+        for (j, anno) in annotation.iterrows():
+            if anno['end'] <= start or anno['start'] >= end:
+                continue
+            else:
+                new_start = max(anno['start'], start)
+                new_end = min(anno['end'], end)
+            sound_event_list.append([new_start - start + recording_start, new_end - start + recording_start])
+        recording_start += end - start
+    # sound_event_list = [[start, end], [start, end], ...]
+    # fuse the event that are too close
+    sound_event_list.sort(key=lambda x: x[0])
+    new_sound_event_list = []
+    for sound_event in sound_event_list:
+        if len(new_sound_event_list) == 0:
+            new_sound_event_list.append(sound_event)
+        else:
+            if sound_event[0] - new_sound_event_list[-1][1] < 0.1:
+                new_sound_event_list[-1][1] = sound_event[1]
+            else:
+                new_sound_event_list.append(sound_event)
+    sound_event_list = new_sound_event_list
+
+    with open(os.path.join(meta_dir, audio.replace('.pcm', '.txt')), 'w') as f:
+        f.write('sound_event_recording,start_time,end_time,azi,ele,dist\n')
+        for sound_event in sound_event_list:
+            f.write(f'{sound},{sound_event[0]},{sound_event[1]},{azimuth},{elevation},{distance}\n')
+
+    peak = chirp_preamble(mono_audio, plot=False)
+
+    chirp_end = peak + 48000
+    recording_end = chirp_end + int(recording_start * 48000)
+    stereo_audio = stereo_audio[chirp_end:recording_end]
+    wavfile.write(os.path.join(audio_dir, audio.replace('.pcm', '.wav')), 48000, stereo_audio)
+
+    chirp_end_imu = int(chirp_end / 48000 * 50)
+    recording_end = int(recording_end / 48000 * 50)
+    imu_data = imu_data[chirp_end_imu:recording_end]
     np.save(os.path.join(imu_dir, audio.replace('.pcm', '.npy')), imu_data)
 
-    audio = pcm_to_wav(os.path.join(data_dir, audio), os.path.join(audio_dir, audio.replace('.pcm', '.wav')), sample_rate=48000, num_channels=2)
-    # 16bit PCM to float
-    audio = audio[:, 0] / 2 ** 15
-
-    # with open(os.path.join(log_dir, log), 'r') as f:
-    #     log = f.readlines()
-    # print(log)
-    # reference_dataset = 'simulate/NIGENS'
-    # for original_audio in log:
-    #     annotation = original_audio.rstrip()
-    #     base_name = annotation.split('/')[-1].replace('\\', '/')
-
-    #     ref_audio = os.path.join(reference_dataset, base_name)
-    #     annotation = os.path.join(reference_dataset, base_name) + '.txt'
-    #     if not os.path.exists(annotation):
-    #         # no annotation file
-    #         continue
-    #     else:
-    #         with open(annotation, 'r') as f:
-    #             annotation = f.readlines()
-    #         annotation = [line.rstrip() for line in annotation]
-    #         print(annotation, librosa.get_duration(filename=ref_audio))
-
-    corr = np.correlate(audio, chirp_template, mode='valid')
-    peaks = signal.find_peaks(corr, height=100, distance=40000)[0]
-    print(corr.shape, audio.shape, chirp_template.shape)
-    fig, axs = plt.subplots(2, 1)
-
-    axs[0].plot(corr)
-    for peak in peaks:
-        axs[0].axvline(peak, color='r')
-
-    axs[1].plot(audio)
-    for peak in peaks:
-        axs[1].axvline(peak, color='r')
-        axs[1].axvline(peak +   48000, color='r')
-
-    plt.savefig('test.png')
-    print('log:', log, audio.shape)
-    break
-
+    # plt.plot(stereo_audio[:, 0])
+    # event_active = np.zeros(len(stereo_audio))
+    # for sound_event in sound_event_list:
+    #     x = int(sound_event[0] * 48000)
+    #     y = int(sound_event[1] * 48000)
+    #     event_active[x:y] = 1
+    # plt.plot(event_active * np.max(stereo_audio[:, 0]))
+    # plt.savefig('vis.png')
+ 

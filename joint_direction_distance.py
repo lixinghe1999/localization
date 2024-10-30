@@ -1,6 +1,6 @@
 from utils.localization_dataset import Localization_dataset
 import pytorch_lightning as pl
-from models.seldnet_model import SeldModel
+from models.seldnet_model import SeldModel, SeldModel_Mobile
 from torch.utils.data import random_split
 import torch
 import torchmetrics
@@ -14,26 +14,44 @@ class Coarse_grained_localization(pl.LightningModule):
     def __init__(self,  lr=1e-3):
         super().__init__()
         # root_dir = 'dataset/earphone/TAU-SEBin/bin_prox_dir_one'
-        root_dir = 'dataset/earphone/NIGENS_1/train'
-        num_class = 14
-        config={'duration': 5, 'frame_duration':1, 'encoding': 'Region', 'num_class': num_class, 
-                    'raw_audio': False, 'label_type': 'framewise'}
-        dataset = Localization_dataset(root_dir=root_dir, config=config, sr=16000)
-        self.train_dataset, self.test_dataset = random_split(dataset, [int(len(dataset)*0.8), len(dataset)-int(len(dataset)*0.8)])
-    
+        # num_class = 1
+        # config={'duration': 5, 'frame_duration':1, 'encoding': 'Region', 'num_class': num_class, 
+        #             'raw_audio': False, 'label_type': 'eventwise', 'motion': False, 'class_names': ['alarm', 'baby', 'blender', 'cat', 'crash', 'dishes', 'dog', 'engine', 'fire', 'footsteps', 
+        #                     'glassbreak', 'gunshot', 'knock', 'phone', 'piano', 'scream', 'speech', 'water']}
+        # dataset = Localization_dataset(root_dir=root_dir, config=config, sr=16000)
+        # self.model = SeldModel_Mobile(mic_channels=3, unique_classes=9, activation='sigmoid', t_pool_size=[50, 1, 1])
+        # self.train_dataset, self.test_dataset = random_split(dataset, [int(len(dataset)*0.8), len(dataset)-int(len(dataset)*0.8)],
+        #                                                      generator=torch.Generator().manual_seed(42))
+
+
+        config={'duration': 5, 'frame_duration':1, 'encoding': 'Region', 'num_class': 1, 
+                    'raw_audio': False, 'label_type': 'eventwise', 'motion': True, 'class_names': ['nigens']}
+        datasets = []
+        root_dirs = ['dataset/earphone/lixing', 'dataset/earphone/shangcheng', 'dataset/earphone/jingfei', 'dataset/earphone/kaiwei', 'dataset/earphone/shaoyang',
+                         'dataset/earphone/haozheng']
+        # root_dirs = ['dataset/earphone/kaiwei']
+        for root_dir in root_dirs:
+            dataset = Localization_dataset(root_dir=root_dir, config=config, sr=16000)
+            datasets.append(dataset)
+        dataset = torch.utils.data.ConcatDataset(datasets)
+        self.model = SeldModel_Mobile(mic_channels=3, unique_classes=8, activation='sigmoid', t_pool_size=[50, 1, 1])
+        self.train_dataset, self.test_dataset = random_split(dataset, [int(len(dataset)*0.8), len(dataset)-int(len(dataset)*0.8)],
+                                                             generator=torch.Generator().manual_seed(42))
+        
+
         print('number of training samples: ', len(self.train_dataset), 'number of testing samples: ', len(self.test_dataset))
-        self.model = SeldModel(mic_channels=3, unique_classes=24, activation='sigmoid', t_pool_size=[50, 1, 1])
+
         self.lr = lr
         self.direction_accuracy = torchmetrics.AveragePrecision(task='multilabel', num_labels=4, average='macro') 
-        self.elevation_accuracy = torchmetrics.AveragePrecision(task='multilabel', num_labels=2, average=None)
+        self.elevation_accuracy = torchmetrics.AveragePrecision(task='multilabel', num_labels=2, average='macro')
         self.distance_accuracy = torchmetrics.AveragePrecision(task='multilabel', num_labels=2, average='macro')
 
     def forward(self, x):
         return self.model(x)
 
     def training_step(self, batch, batch_idx):
-        x, y = batch
-        y_hat = self.model(x)
+        x = batch['spatial_feature']; y = batch['label']; imu = batch['imu']
+        y_hat = self.model(x, imu)
         if len(y_hat.shape) == 3:
             y_hat = y_hat.reshape(-1, y_hat.shape[-1])
             y = y.reshape(-1, y.shape[-1])
@@ -42,17 +60,19 @@ class Coarse_grained_localization(pl.LightningModule):
         return loss
     
     def validation_step(self, batch, batch_idx):
-        x, y = batch
-        y_hat = self.model(x)
+        x = batch['spatial_feature']; y = batch['label']; imu = batch['imu']
+        y_hat = self.model(x, imu)
         assert y_hat.shape == y.shape
         if len(y_hat.shape) == 3:
             y_hat = y_hat.reshape(-1, y_hat.shape[-1])
             y = y.reshape(-1, y.shape[-1])
         direction_acc = self.direction_accuracy(y_hat[:, :4], y[:, :4].long())
+        elevation_acc = self.elevation_accuracy(y_hat[:, 4:6], y[:, 4:6].long())
         dist_acc = self.distance_accuracy(y_hat[:, 6:8], y[:, 6:8].long())
         
-        self.log('val_direction', direction_acc)
-        self.log('val_distance', dist_acc)
+        self.log('azimuth', direction_acc)
+        self.log('elevation', elevation_acc)
+        self.log('distance', dist_acc)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.model.parameters(), lr=self.lr)
@@ -104,9 +124,11 @@ def direction_vis():
     plt.bar(labels, f1score, width=0.3)
     plt.ylabel('F1 score')
     plt.savefig('direction_f1.png')
+
+
 if __name__ == "__main__":
     model = Coarse_grained_localization()
-    trainer = pl.Trainer(max_epochs=50, devices=1)
+    trainer = pl.Trainer(max_epochs=20, devices=1)
     trainer.fit(model)
     # trainer.validate(model)
 
