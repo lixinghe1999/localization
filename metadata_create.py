@@ -83,7 +83,7 @@ def chirp_preamble(mono_audio, plot=False):
         plt.savefig('test.png')
     return peaks[0]
 
-datadir = 'dataset/earphone/lixing'
+datadir = 'dataset/earphone/shaoyang_human'
 data_dir = os.path.join(datadir, 'data')
 log_dir = os.path.join(datadir, 'log')
 
@@ -97,6 +97,9 @@ audios = [data for data in datas if data.endswith('.pcm')]; audios.sort()
 imus = [data for data in datas if data.endswith('.csv')]; imus.sort()
 logs = os.listdir(log_dir); logs.sort()
 
+assert len(audios) == len(imus)
+if len(logs) == 0: # no log file, create a dummy log file
+    logs = [None] * len(audios)
 for audio, imu, log in zip(audios, imus, logs):
     print('processing:', audio, imu, log)
 
@@ -117,32 +120,43 @@ for audio, imu, log in zip(audios, imus, logs):
     mono_audio = stereo_audio[:, 0] / 2 ** 15
 
     reference_dataset = 'simulate/NIGENS'
-    log = pd.read_csv(os.path.join(log_dir, log), sep=' ')
+    if log is None:
+        # auto generate the sound event
+        mono_audio /= np.max(np.abs(mono_audio))
+        # reshape the audio to 2D with 0.1s window
+        # timestamps = librosa.effects.split(mono_audio, top_db=20, frame_length=2048, hop_length=2048)
+        sound_event_list = [[0, len(mono_audio) / 48000]]
+        peak = 0;recording_start = len(mono_audio) / 48000
+    else:
+        peak = chirp_preamble(mono_audio, plot=False)
 
-    recording_start = 0
-    sound_event_list = []
-    for (i, row) in log.iterrows():
-        # each row: left_audio, right_audio, start, end
-        left_audio = row['left_audio']; right_audio = row['right_audio']
-        start = float(row['start']); end = float(row['end'])
+        log = pd.read_csv(os.path.join(log_dir, log), sep=' ')
+        recording_start = 0
+        sound_event_list = []
+        for (i, row) in log.iterrows():
+            # each row: left_audio, right_audio, start, end
+            left_audio = row['left_audio']; right_audio = row['right_audio']
+            start = float(row['start']); end = float(row['end'])
 
-        annotation = left_audio.rstrip()
-        base_name = annotation.split('/')[-1].replace('\\', '/')
+            annotation = left_audio.rstrip()
+            base_name = annotation.split('/')[-1].replace('\\', '/')
 
-        ref_audio = os.path.join(reference_dataset, base_name)
-        annotation = os.path.join(reference_dataset, base_name) + '.txt'
-        annotation = pd.read_csv(annotation, sep='\t', names=['start', 'end'])
+            ref_audio = os.path.join(reference_dataset, base_name)
+            annotation = os.path.join(reference_dataset, base_name) + '.txt'
+            annotation = pd.read_csv(annotation, sep='\t', names=['start', 'end'])
 
-        for (j, anno) in annotation.iterrows():
-            if anno['end'] <= start or anno['start'] >= end:
-                continue
-            else:
-                new_start = max(anno['start'], start)
-                new_end = min(anno['end'], end)
-            sound_event_list.append([new_start - start + recording_start, new_end - start + recording_start])
-        recording_start += end - start
+            for (j, anno) in annotation.iterrows():
+                if anno['end'] <= start or anno['start'] >= end:
+                    continue
+                else:
+                    new_start = max(anno['start'], start)
+                    new_end = min(anno['end'], end)
+                sound_event_list.append([new_start - start + recording_start, new_end - start + recording_start])
+            recording_start += end - start
+
     # sound_event_list = [[start, end], [start, end], ...]
     # fuse the event that are too close
+
     sound_event_list.sort(key=lambda x: x[0])
     new_sound_event_list = []
     for sound_event in sound_event_list:
@@ -160,7 +174,6 @@ for audio, imu, log in zip(audios, imus, logs):
         for sound_event in sound_event_list:
             f.write(f'{sound},{sound_event[0]},{sound_event[1]},{azimuth},{elevation},{distance}\n')
 
-    peak = chirp_preamble(mono_audio, plot=False)
 
     chirp_end = peak + 48000
     recording_end = chirp_end + int(recording_start * 48000)
@@ -172,12 +185,4 @@ for audio, imu, log in zip(audios, imus, logs):
     imu_data = imu_data[chirp_end_imu:recording_end]
     np.save(os.path.join(imu_dir, audio.replace('.pcm', '.npy')), imu_data)
 
-    # plt.plot(stereo_audio[:, 0])
-    # event_active = np.zeros(len(stereo_audio))
-    # for sound_event in sound_event_list:
-    #     x = int(sound_event[0] * 48000)
-    #     y = int(sound_event[1] * 48000)
-    #     event_active[x:y] = 1
-    # plt.plot(event_active * np.max(stereo_audio[:, 0]))
-    # plt.savefig('vis.png')
- 
+  

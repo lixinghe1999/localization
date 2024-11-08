@@ -150,7 +150,7 @@ class SeldModel_Mobile(SeldModel):
         self.imu_transformer = nn.TransformerEncoder(transformer, num_layers=4)
         self.imu_norm = nn.GroupNorm(2, 6)
         self.imu_audio_proj = nn.Linear(params['nb_cnn2d_filt'], params['nb_cnn2d_filt'])
-
+        self.t_downsample = t_pool_size[0] * t_pool_size[1] * t_pool_size[2]
 
     def forward(self, x, imu):
         """
@@ -167,7 +167,7 @@ class SeldModel_Mobile(SeldModel):
         imu = self.imu_proj(imu)
         imu = self.imu_transformer(imu)
         # max_pooling by 50
-        imu = F.max_pool1d(imu.transpose(1, 2).contiguous(), kernel_size=50).transpose(1, 2).contiguous()
+        imu = F.max_pool1d(imu.transpose(1, 2).contiguous(), kernel_size=self.t_downsample).transpose(1, 2).contiguous()
 
         x = x.transpose(1, 2).contiguous()
         x = x.view(x.shape[0], x.shape[1], -1).contiguous()

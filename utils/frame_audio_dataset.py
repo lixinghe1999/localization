@@ -104,7 +104,7 @@ class AudioSet_dataset(Dataset):
         else:
             audio = audio[:self.duration*self.sr]
         output_dict['audio'] = audio
-        output_dict['label'] = label
+        output_dict['cls_label'] = label
         if 'embeddings' in self.modality:
             embeddings_file = os.path.join(self.embeddings_dir, segment_id + '.npy')
             embeddings = np.load(embeddings_file).astype(np.float32)

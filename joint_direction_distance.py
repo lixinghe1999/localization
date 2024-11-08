@@ -24,21 +24,19 @@ class Coarse_grained_localization(pl.LightningModule):
         #                                                      generator=torch.Generator().manual_seed(42))
 
 
-        config={'duration': 5, 'frame_duration':1, 'encoding': 'Region', 'num_class': 1, 
-                    'raw_audio': False, 'label_type': 'eventwise', 'motion': True, 'class_names': ['nigens']}
+        config={'duration': 5, 'frame_duration':5, 'encoding': 'Region', 'num_class': 1, 
+                    'raw_audio': False, 'label_type': 'eventwise', 'motion': True, 'class_names': ['real', 'nigens']}
         datasets = []
         root_dirs = ['dataset/earphone/lixing', 'dataset/earphone/shangcheng', 'dataset/earphone/jingfei', 'dataset/earphone/kaiwei', 'dataset/earphone/shaoyang',
                          'dataset/earphone/haozheng']
-        # root_dirs = ['dataset/earphone/kaiwei']
+        # root_dirs = ['dataset/earphone/shaoyang']
         for root_dir in root_dirs:
             dataset = Localization_dataset(root_dir=root_dir, config=config, sr=16000)
             datasets.append(dataset)
         dataset = torch.utils.data.ConcatDataset(datasets)
-        self.model = SeldModel_Mobile(mic_channels=3, unique_classes=8, activation='sigmoid', t_pool_size=[50, 1, 1])
+        self.model = SeldModel_Mobile(mic_channels=3, unique_classes=8, activation='sigmoid', t_pool_size=[10, 5, 5])
         self.train_dataset, self.test_dataset = random_split(dataset, [int(len(dataset)*0.8), len(dataset)-int(len(dataset)*0.8)],
                                                              generator=torch.Generator().manual_seed(42))
-        
-
         print('number of training samples: ', len(self.train_dataset), 'number of testing samples: ', len(self.test_dataset))
 
         self.lr = lr
@@ -62,6 +60,7 @@ class Coarse_grained_localization(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         x = batch['spatial_feature']; y = batch['label']; imu = batch['imu']
         y_hat = self.model(x, imu)
+        # print(y_hat.shape, y.shape)
         assert y_hat.shape == y.shape
         if len(y_hat.shape) == 3:
             y_hat = y_hat.reshape(-1, y_hat.shape[-1])
@@ -81,10 +80,10 @@ class Coarse_grained_localization(pl.LightningModule):
         return torch.nn.functional.binary_cross_entropy(y_hat, y.float())
     
     def train_dataloader(self):
-        return torch.utils.data.DataLoader(self.train_dataset, batch_size=8, shuffle=True, num_workers=4)
+        return torch.utils.data.DataLoader(self.train_dataset, batch_size=4, shuffle=True, num_workers=4)
 
     def val_dataloader(self):
-        return torch.utils.data.DataLoader(self.test_dataset, batch_size=8, shuffle=False, num_workers=4)  
+        return torch.utils.data.DataLoader(self.test_dataset, batch_size=4, shuffle=False, num_workers=4)  
 
 def distance_binary_cls():
     import matplotlib.pyplot as plt
@@ -128,7 +127,7 @@ def direction_vis():
 
 if __name__ == "__main__":
     model = Coarse_grained_localization()
-    trainer = pl.Trainer(max_epochs=20, devices=1)
+    trainer = pl.Trainer(max_epochs=10, devices=1, log_every_n_steps=10)
     trainer.fit(model)
     # trainer.validate(model)
 

@@ -75,18 +75,35 @@ def simple_heuristic(sound_location, sound_classification):
                 detected_sources.append(sound_location[t, s])
         
 
-        if len(detected_class) == 0:
+        if len(detected_sources) == 0:
             continue
-        elif len(detected_class) == 1: # only one sound detected, directly assign the class
-            refined_prediction[t, 0, :4] = detected_sources[0]
-            refined_prediction[t, 0, -1] = detected_class[0]
-        else:
-            for det in detected_class:
-                
+        elif len(detected_sources) == 1: # only one source
+            refined_prediction[t, 0] = np.concatenate([detected_sources[0], [detected_class[0]]])
+        elif len(detected_sources) == 2: # two overlapped sources
+            exist_source = []
+            for s in range(num_source):
+                prev_source = refined_prediction[t-1, s, :-1]
+                prev_class = refined_prediction[t-1, s, -1]
+                for detected_source in detected_sources:
+                    if prev_source[0] and np.linalg.norm(prev_source - detected_source) < 0.5 and prev_class in detected_class:
+                        refined_prediction[t, s] = np.concatenate([detected_source, prev_class], axis=-1)
+                        exist_source.append(detected_source)
+                        break
+            detected_sources = [detected_source for detected_source in detected_sources if detected_source not in exist_source]
+            print('num of matched sources:', len(exist_source))
+            print('num of unmatched sources:', len(detected_sources))
+
+
+            for detected_source in detected_sources:
                 for s in range(num_source):
-                    if det == refined_prediction[t-1, s, -1]:
-                        refined_prediction[t, s, :4] = detected_sources[s]
-                        refined_prediction[t, s, -1] = det
+                    if not refined_prediction[t, s, 0]:
+                        refined_prediction[t, s] = np.concatenate([detected_source, [detected_class[0]]], axis=-1)
+                        break
+                
+            for detected_class_idx in detected_class:
+                for s in range(num_source):
+                    if not refined_prediction[t, s, 0]:
+                        refined_prediction[t, s] = np.concatenate([detected_sources[0], [detected_class_idx]], axis=-1)
                         break
         print(refined_prediction[t])
 

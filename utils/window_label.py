@@ -72,9 +72,9 @@ def Multi_ACCDOA_label(labels, config):
     config
     sed: bool, if True, do sed+doa, else doa only
     '''
-    num_source = 3
+    num_source = 2
     _nb_label_frames = config['duration'] * 10
-    label_mat = np.zeros((_nb_label_frames, num_source, 5))
+    label_mat = np.zeros((_nb_label_frames, num_source, 4))
     frame_source_count = np.zeros((_nb_label_frames))
     for frame, class_idx, _, azimuth, elevation, _  in labels:
         if frame < _nb_label_frames:
@@ -83,14 +83,14 @@ def Multi_ACCDOA_label(labels, config):
             z = np.sin(np.radians(elevation))
 
             source_idx = int(frame_source_count[frame])
+            if source_idx >= num_source:
+                continue
             label_mat[frame, source_idx, 0] = 1
             label_mat[frame, source_idx, 1] = x
             label_mat[frame, source_idx, 2] = y
             label_mat[frame, source_idx, 3] = z
-            label_mat[frame, source_idx, 4] = class_idx
-
             frame_source_count[frame] += 1
-    label_mat = label_mat.reshape(-1, num_source * 5)
+    label_mat = label_mat.reshape(-1, num_source * 4)
     return label_mat
 
 

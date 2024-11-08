@@ -131,6 +131,8 @@ class Separation_dataset(Dataset):
         source_audio = np.array(source_audio)
         
         # print('mixture_audio shape:', mixture_audio.shape, 'source_audio shape:', source_audio.shape)
+        if self.output_format == 'test':
+            return mixture_audio, mixture_audio
         if self.output_format == 'separation':
             # fix to the first channel
             mixture_audio = mixture_audio[0] # [left, T]
@@ -167,8 +169,8 @@ class Separation_dataset(Dataset):
             # print('mixture_audio shape:', mixture_audio.shape, 'source_audio shape:', source_audio.shape, shifts)
             return mixture_audio, source_audio
         elif self.output_format == 'region':
-            number_of_regions = self.config['model']['n_src'] # note that it is the number of regions, speakers < regions
-            regions = np.linspace(self.config['min_azimuth'], self.config['max_azimuth'], number_of_regions + 1)
+            number_of_regions = self.config['max_sources'] # note that it is the number of regions, speakers < regions
+            regions = np.linspace(0, 360, number_of_regions + 1)
             
             region_audio = np.zeros((number_of_regions, self.config['sample_rate'] * self.config['duration']), dtype=np.float32)
             region_active = np.zeros(number_of_regions, dtype=np.int32)
