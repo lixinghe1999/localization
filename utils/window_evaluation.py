@@ -72,10 +72,14 @@ def ACCDOA_evaluation(pred, label, implicit=True):
     distances = distances < 20
     
     pred_sed_binary[~ (pred_sed_binary & label_sed & distances)] = 0
-
-    precision = torchmetrics.Precision(task='multilabel', num_labels=n_class)(torch.from_numpy(pred_sed_binary), torch.from_numpy(label_sed))
-    recall = torchmetrics.Recall(task='multilabel', num_labels=n_class)(torch.from_numpy(pred_sed_binary), torch.from_numpy(label_sed))
-    F1_score = torchmetrics.F1Score(task='multilabel', num_labels=n_class)(torch.from_numpy(pred_sed_binary), torch.from_numpy(label_sed))
+    if n_class == 1:
+        precision = torchmetrics.Precision(task='binary')(torch.from_numpy(pred_sed_binary), torch.from_numpy(label_sed))
+        recall = torchmetrics.Recall(task='binary')(torch.from_numpy(pred_sed_binary), torch.from_numpy(label_sed))
+        F1_score = torchmetrics.F1Score(task='binary')(torch.from_numpy(pred_sed_binary), torch.from_numpy(label_sed))
+    else:
+        precision = torchmetrics.Precision(task='multilabel', num_labels=n_class)(torch.from_numpy(pred_sed_binary), torch.from_numpy(label_sed))
+        recall = torchmetrics.Recall(task='multilabel', num_labels=n_class)(torch.from_numpy(pred_sed_binary), torch.from_numpy(label_sed))
+        F1_score = torchmetrics.F1Score(task='multilabel', num_labels=n_class)(torch.from_numpy(pred_sed_binary), torch.from_numpy(label_sed))
 
     return {
         'precision': precision,

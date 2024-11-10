@@ -166,7 +166,6 @@ class Separation_dataset(Dataset):
 
             mixture_audio = mixture_audio[:, 8:]
             source_audio = source_audio[:1, 8:]
-            # print('mixture_audio shape:', mixture_audio.shape, 'source_audio shape:', source_audio.shape, shifts)
             return mixture_audio, source_audio
         elif self.output_format == 'region':
             number_of_regions = self.config['max_sources'] # note that it is the number of regions, speakers < regions

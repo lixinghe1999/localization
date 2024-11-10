@@ -48,7 +48,7 @@ def ACCDOA_label(labels, config, sed=False):
     config
     sed: bool, if True, do sed+doa, else doa only
     '''
-    num_class = config['num_class']
+    num_class = 1
     _nb_label_frames = config['duration'] * 10
     label_mat = np.zeros((_nb_label_frames, num_class, 4))
     for frame, class_idx, _, azimuth, elevation, _  in labels:

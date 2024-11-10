@@ -167,7 +167,6 @@ class Localization_dataset(Dataset):
         else:
             spec = spectrogram(audio)
             spatial_feature = gcc_mel_spec(spec).astype(np.float32)
-        audio = audio[0]
 
         if self.motion:
             imu_name = os.path.join(self.motion_folder, label_name.replace('.txt', '.npy'))

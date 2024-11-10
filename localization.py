@@ -69,13 +69,6 @@ class SeldNetLightningModule(pl.LightningModule):
         outputs = self(data)
         eval_dict = self.evaluation(outputs.cpu().numpy(), labels.cpu().numpy())
 
-        # if batch_idx == 0:
-        #     save_path = trainer.logger.save_dir
-        #     version = trainer.logger.version
-        #     auto_defined_path = f"{save_path}/lightning_logs/version_{version}/{self.global_step}.png"
-        #     sed_vis(audio.cpu().numpy(), outputs.cpu().numpy(), labels.cpu().numpy(), save_path=auto_defined_path)
-
-
         self.log('val_sed_F1', eval_dict['sed_F1'])
         self.log('val_F1', eval_dict['F1'])
         self.log('val_precision', eval_dict['precision'])
@@ -85,75 +78,89 @@ class SeldNetLightningModule(pl.LightningModule):
 
     def configure_optimizers(self):
         return optim.Adam(self.model.parameters(), lr=0.0001)
-     
+
+def run_MUSIC(dataset):
+    from utils.doa import inference, init
+    from utils.parameter import MIC_ARRAY_SIMULATION
+    algo = init(MIC_ARRAY_SIMULATION, fs=16000, nfft=1600, algorithm='music')
+
+    for i in range(len(dataset)):
+        data = dataset[i]
+        audio, imu = data['audio'], data['imu']
+        predictions = inference(algo, [audio, None])
+        print(predictions.shape, data['label'].shape)
+        acc = ACCDOA_evaluation(predictions, data['label'])
+        print(acc)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, default='configs/smartglass.json')
     args = parser.parse_args()
     
-    config = {
-        "dataset": "smartglass",
-        "train_datafolder": "/home/lixing/localization/dataset/starss23/dev-train-sony",
-        "test_datafolder": "/home/lixing/localization/dataset/starss23/dev-test-sony",
-        "cache_folder": "cache/starss23/",
-        "encoding": "Multi_ACCDOA",
-        "duration": 5,
-        "frame_duration": 0.1,
-        "batch_size": 64,
-        "epochs": 50,
-        "model": "seldnet",
-        "label_type": "framewise",
-        "raw_audio": False,
-        'num_channel': 10,
-        'output_dimension': 6, # no need to do classification now
-        "pretrained": False,
-        "test": False,
-        "class_names": [
-                "Female speech, woman speaking",
-                "Male speech, man speaking",
-                "Clapping",
-                "Telephone",
-                "Laughter",
-                "Domestic sounds",
-                "Walk, footsteps",
-                "Door, open or close",
-                "Music",
-                "Musical instrument",
-                "Water tap, faucet",
-                "Bell",
-                "Knock"
-            ],
-        "motion": False,
-    }
-
     # config = {
-    #     "train_datafolder": "/home/lixing/localization/dataset/smartglass/AudioSet_2/train",
-    #     "test_datafolder": "/home/lixing/localization/dataset/smartglass/AudioSet_2/test",
-    #     "cache_folder": "cache/audioset_2/",
+    #     "dataset": "smartglass",
+    #     "train_datafolder": "/home/lixing/localization/dataset/starss23/dev-train-sony",
+    #     "test_datafolder": "/home/lixing/localization/dataset/starss23/dev-test-sony",
+    #     "cache_folder": "cache/starss23/",
     #     "encoding": "Multi_ACCDOA",
     #     "duration": 5,
     #     "frame_duration": 0.1,
-    #     "batch_size": 16,
-    #     "epochs": 10,
+    #     "batch_size": 64,
+    #     "epochs": 50,
     #     "model": "seldnet",
     #     "label_type": "framewise",
     #     "raw_audio": False,
-    #     'num_channel': 15,
+    #     'num_channel': 10,
     #     'output_dimension': 6, # no need to do classification now
     #     "pretrained": False,
     #     "test": False,
-    #     'class_names':["sound"],
-    #     'motion': False
+    #     "class_names": [
+    #             "Female speech, woman speaking",
+    #             "Male speech, man speaking",
+    #             "Clapping",
+    #             "Telephone",
+    #             "Laughter",
+    #             "Domestic sounds",
+    #             "Walk, footsteps",
+    #             "Door, open or close",
+    #             "Music",
+    #             "Musical instrument",
+    #             "Water tap, faucet",
+    #             "Bell",
+    #             "Knock"
+    #         ],
+    #     "motion": False,
     # }
+
+    config = {
+        "train_datafolder": "/home/lixing/localization/dataset/smartglass/AudioSet_2/train",
+        "test_datafolder": "/home/lixing/localization/dataset/smartglass/AudioSet_2/test",
+        "cache_folder": "cache/audioset_2/",
+        "encoding": "ACCDOA",
+        "duration": 5,
+        "frame_duration": 0.1,
+        "batch_size": 16,
+        "epochs": 10,
+        "model": "seldnet",
+        "label_type": "framewise",
+        "raw_audio": False,
+        'num_channel': 15,
+        'output_dimension': 6, # no need to do classification now
+        "pretrained": False,
+        "test": False,
+        'class_names':["sound"],
+        'motion': False
+    }
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    train_dataset = Localization_dataset(config['train_datafolder'], config)
+    # train_dataset = Localization_dataset(config['train_datafolder'], config)
     test_dataset = Localization_dataset(config['test_datafolder'], config)
-
-    recognition_model = AudioRecognition(train_dataset=train_dataset, test_dataset=test_dataset)
-    trainer = pl.Trainer(max_epochs=10, devices=1)
-    trainer.fit(recognition_model)
+    
+    # recognition_model = AudioRecognition(train_dataset=train_dataset, test_dataset=test_dataset)
+    # trainer = pl.Trainer(max_epochs=10, devices=1)
+    # trainer.fit(recognition_model)
 
 
     # train_dataset._cache_(config['cache_folder'] + '/train')
