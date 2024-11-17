@@ -3,7 +3,7 @@ import torch
 import time
 from models.seldnet_model import SeldModel
 from models.deepbeam import BeamformerModel
-from utils.separation_dataset import shift_mixture
+from utils.beamforming_dataset import shift_mixture
 
 from utils.window_feature import spectrogram, gcc_mel_spec 
 
@@ -35,13 +35,14 @@ def inference_loc(model, audio, num_test=1, device='cuda'):
     spatial_feature = spatial_feature[None, ...]
 
     spatial_feature = torch.tensor(spatial_feature, device=device).float()
+    warm_up = 10
     if num_test > 1:
         for i in range(num_test):
-            if i == 10: # warm up
+            if i == warm_up: # warm up
                 start = time.time()
             output = model(spatial_feature)
         end = time.time()
-        print("Time taken for 100 iterations: ", (end - start)/100)
+        print("Time taken for 100 iterations: ", (end - start)/(num_test - warm_up))
     else:
         output = model(spatial_feature)
     return output
@@ -49,33 +50,35 @@ def inference_loc(model, audio, num_test=1, device='cuda'):
 def inference_beam(model, audio, target_pos, num_test=1, device='cuda'):
     audio, shift = shift_mixture(audio, target_pos, 16000)
     audio = torch.tensor(audio, device=device).float()[None, :, 8:]
+
+    warm_up = 10
     if num_test > 1:
         for i in range(num_test):
-            if i == 10: # warm up
+            if i == warm_up: # warm up
                 start = time.time()
             output = model(audio)
         end = time.time()
-        print("Time taken for 100 iterations: ", (end - start)/100)
+        print("Time taken for 100 iterations: ", (end - start)/(num_test - warm_up))
     else:
         output = model(audio)
     return output
 
 if __name__ == '__main__':
-    # model = init_model(model_type='seldnet')
+    model = init_model(model_type='seldnet')
 
-    # dummpy_audio = np.random.randn(5, 80000)
-    # device = 'cuda'
-    # model.to(device)
-    # output = inference_loc(model, dummpy_audio, num_test=100, device=device)
-
-    # device = 'cpu'
-    # model.to(device)
-    # output = inference_loc(model, dummpy_audio, num_test=100, device=device)
-
-    model = init_model(model_type='deepbeam')
-    dummpy_audio = np.random.randn(5, 40000)
+    dummpy_audio = np.random.randn(5, 80000)
     device = 'cuda'
     model.to(device)
-    azimuth = 90
-    target_pos = np.array([np.cos(np.deg2rad(azimuth)), np.sin(np.deg2rad(azimuth))])
-    output = inference_beam(model, dummpy_audio, target_pos=target_pos, num_test=100, device=device)
+    output = inference_loc(model, dummpy_audio, num_test=100, device=device)
+
+    device = 'cpu'
+    model.to(device)
+    output = inference_loc(model, dummpy_audio, num_test=100, device=device)
+
+    # model = init_model(model_type='deepbeam')
+    # dummpy_audio = np.random.randn(5, 40000)
+    # device = 'cuda'
+    # model.to(device)
+    # azimuth = 90
+    # target_pos = np.array([np.cos(np.deg2rad(azimuth)), np.sin(np.deg2rad(azimuth))])
+    # output = inference_beam(model, dummpy_audio, target_pos=target_pos, num_test=100, device=device)

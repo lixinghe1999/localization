@@ -83,7 +83,7 @@ def chirp_preamble(mono_audio, plot=False):
         plt.savefig('test.png')
     return peaks[0]
 
-datadir = 'dataset/earphone/shaoyang_human'
+datadir = 'dataset/earphone/haozheng_human'
 data_dir = os.path.join(datadir, 'data')
 log_dir = os.path.join(datadir, 'log')
 

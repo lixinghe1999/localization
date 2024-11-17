@@ -12,6 +12,7 @@ import json
 
 
 class AudioSet_dataset(Dataset):
+
     def __init__(self, root='audioset', modality=[], split='eval', sr=16000, duration=10, frame_duration=0.1, label_level='clip'):
         self.image_dir = os.path.join(root, 'audioset_{}_strong_images'.format(split))
         self.audio_dir = os.path.join(root, 'audioset_{}_strong_audios'.format(split))
@@ -23,14 +24,34 @@ class AudioSet_dataset(Dataset):
         labels = {}
         self.label_map = {}
         for row in label.itertuples():
+            start_seconds = row.start_time_seconds
+            end_seconds = row.end_time_seconds
+            label = row.label
             segment_id = row.segment_id 
             if row.label not in self.label_map:
                 self.label_map[row.label] = len(self.label_map)
             if segment_id not in labels:
                 labels[segment_id] = []
-            labels[segment_id].append([row.start_time_seconds, row.end_time_seconds, row.label])
+            
+            labels[segment_id].append([start_seconds, end_seconds, label])
         self.num_classes = len(self.label_map)
         print('Number of classes:', self.num_classes)
+
+        # only keep 10 classes
+        num_segment = len(labels)
+        select_classes = range(10)
+        for segment_id in list(labels.keys()):
+            new_labels = []
+            for start, end, label in labels[segment_id]:
+                label_idx = self.label_map[label]
+                if label_idx in select_classes:
+                    new_labels.append([start, end, label])
+            if len(new_labels) > 0:
+                labels[segment_id] = new_labels   
+            else:
+                del labels[segment_id]
+        print('select classes from', select_classes, 'Number of segments:', len(labels), 'before filtering', num_segment)
+        
 
         ontology = pd.read_csv(os.path.join(root, 'mid_to_display_name.tsv'), sep='\t', names=['mid', 'display_name'])
         self.ontology = {}
@@ -48,7 +69,6 @@ class AudioSet_dataset(Dataset):
         self.modality = modality
         self.label_level = label_level
 
-        # clip-level
         self.clip_labels = []; self.frame_labels = []
         self.num_frames_per_clip = int(duration / self.frame_duration)
         for segment_id in labels:
@@ -128,26 +148,20 @@ def dataset_sample(dataset):
         inactive_frame = np.sum(label, axis=1) == 0
         single_class_frame = np.sum(label, axis=1) == 1
         overlap_frame = np.sum(label, axis=1) > 1
-        print(np.mean(inactive_frame), np.mean(single_class_frame), np.mean(overlap_frame))
 
         inactive_frames.append(np.mean(inactive_frame))
         single_class_frames.append(np.mean(single_class_frame))
         overlap_frames.append(np.mean(overlap_frame))
-
+        if np.mean(single_class_frame) == 1:
+            count += 1
     print('Inactive frames:', np.mean(inactive_frames))
     print('Single class frames:', np.mean(single_class_frames))
     print('Overlap frames:', np.mean(overlap_frames))
-    print('Number of single label clips:', count)
+    print('Number of single label clips:', count, 'total clips:', len(dataset.frame_labels))
 if __name__ == '__main__':
-    dataset = AudioSet_dataset('dataset/audioset', split='eval', modality=['audio', 'embeddings', 'text'], label_level='clip')
+    dataset = AudioSet_dataset('dataset/audioset', split='eval', modality=['audio'], label_level='clip')
     print(len(dataset))
-    data = dataset[9]
-    print(data.keys())
-    print(data['audio'].shape)
-    print(data['label'].shape)
-    print(data['embeddings'].shape)
-    print(data['text'])
-    # dataset_sample(dataset)
+    dataset_sample(dataset)
 
 
 

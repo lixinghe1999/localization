@@ -9,7 +9,7 @@ from models.deepbeam import BeamformerModel
 from asteroid.losses import pairwise_neg_sisdr, singlesrc_neg_sdsdr, multisrc_neg_sdsdr, PITLossWrapper
 from asteroid.engine import System
 # This will automatically download MiniLibriMix from Zenodo on the first run.
-from utils.separation_dataset import Separation_dataset
+from utils.beamforming_dataset import Beamforming_dataset
 import torch.nn as nn
 import torch    
 import numpy as np
@@ -75,24 +75,6 @@ def visualize(dataset):
     print('loss_pw:', loss_pw)
     plt.savefig('test.png')
 
-# class NewSystem(System):
-#     def __init__(
-#         self,
-#         model,
-#         optimizer,
-#         loss_func,
-#         train_loader,
-#         val_loader=None,
-#         scheduler=None,
-#         config=None,
-#     ):
-#         super().__init__(model, optimizer, loss_func, train_loader, val_loader, scheduler, config)
-#         self.evaluation_metric = pwactive_wrapper(pairwise_neg_sisdr, evaluation=True)
-#     def validation_step(self, batch, batch_nb):
-#         inputs, targets = batch
-#         est_targets = self(inputs)
-#         loss = self.evaluation_metric(est_targets, targets)
-#         self.log("val_loss", loss, on_epoch=True, prog_bar=True)
 
 if __name__ == '__main__':
 
@@ -100,8 +82,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     args = parser.parse_args()
 
-    config = { "train_datafolder": "dataset/smartglass/TIMIT_2/train",
-                "test_datafolder": "dataset/smartglass/TIMIT_2/test",
+    config = { "train_datafolder": "dataset/smartglass/AudioSet_2/train",
+                "test_datafolder": "dataset/smartglass/AudioSet_2/test",
                 "ckpt": "",
                 "duration": 5,
                 "batch_size": 4,
@@ -109,23 +91,20 @@ if __name__ == '__main__':
                 "sample_rate": 16000,
                 "max_sources": 8,
             }
-    train_dataset = Separation_dataset(config['train_datafolder'], config,)
-    val_dataset = Separation_dataset(config['test_datafolder'], config,)
+    train_dataset = Beamforming_dataset(config['train_datafolder'], config,)
+    val_dataset = Beamforming_dataset(config['test_datafolder'], config,)
     print('train dataset {}, test dataset {}'.format(len(train_dataset), len(val_dataset)))
 
-    # visualize(train_dataset)
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=4)
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=config['batch_size'], shuffle=False, num_workers=4)
     
     model = BeamformerModel(ch_in=5, synth_mid=64, synth_hid=96, block_size=16, kernel=3, synth_layer=4, synth_rep=4, lookahead=0)
-    # model = AmbiSep()
-    # model = FasNetTAC(n_src=8)
 
     loss = PITLossWrapper(pairwise_neg_sisdr, pit_from="pw_mtx")
 
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     system = System(model, optimizer, loss, train_loader, val_loader)
-    trainer = Trainer(max_epochs=50, devices=1, num_nodes=1)
+    trainer = Trainer(max_epochs=10, devices=1, num_nodes=1)
     trainer.fit(system)
     # trainer.validate(system)
   

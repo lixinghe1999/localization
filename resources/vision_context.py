@@ -2,7 +2,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from utils.frame_audio_dataset import AudioSet_dataset
+from utils.recognition_dataset import AudioSet_dataset
 
 dataset = AudioSet_dataset(root='../dataset/audioset', vision=True, split='eval', sr=16000, duration=10, frame_duration=0.1, label_level='clip')
 dataset.filter_modal(['audio', 'embeddings'])

@@ -24,17 +24,17 @@ class Coarse_grained_localization(pl.LightningModule):
         #                                                      generator=torch.Generator().manual_seed(42))
 
 
-        config={'duration': 5, 'frame_duration':5, 'encoding': 'Region', 'num_class': 1, 
-                    'raw_audio': False, 'label_type': 'eventwise', 'motion': True, 'class_names': ['real', 'nigens']}
+        config={'duration': 5, 'frame_duration':0.2, 'encoding': 'Region', 'num_class': 1, 
+                    'raw_audio': False, 'label_type': 'eventwise', 'motion': True, 'class_names': ['real', 'nigens', 'human']}
         datasets = []
-        root_dirs = ['dataset/earphone/lixing', 'dataset/earphone/shangcheng', 'dataset/earphone/jingfei', 'dataset/earphone/kaiwei', 'dataset/earphone/shaoyang',
-                         'dataset/earphone/haozheng']
-        # root_dirs = ['dataset/earphone/shaoyang']
+        root_dirs = ['dataset/earphone/lixing', 'dataset/earphone/shangcheng', 'dataset/earphone/jingfei', 'dataset/earphone/kaiwei', 'dataset/earphone/shaoyang', 'dataset/earphone/haozheng', 
+                    'dataset/earphone/lixing_human', 'dataset/earphone/bufang_human', 'dataset/earphone/shaoyang_human', 'dataset/earphone/haozheng_human']
+        root_dirs = ['dataset/earphone/lixing', 'dataset/earphone/shangcheng', 'dataset/earphone/jingfei', 'dataset/earphone/kaiwei', 'dataset/earphone/shaoyang', 'dataset/earphone/haozheng']
         for root_dir in root_dirs:
             dataset = Localization_dataset(root_dir=root_dir, config=config, sr=16000)
             datasets.append(dataset)
         dataset = torch.utils.data.ConcatDataset(datasets)
-        self.model = SeldModel_Mobile(mic_channels=3, unique_classes=8, activation='sigmoid', t_pool_size=[10, 5, 5])
+        self.model = SeldModel_Mobile(mic_channels=3, unique_classes=8, activation='sigmoid', t_pool_size=[10, 1, 1])
         self.train_dataset, self.test_dataset = random_split(dataset, [int(len(dataset)*0.8), len(dataset)-int(len(dataset)*0.8)],
                                                              generator=torch.Generator().manual_seed(42))
         print('number of training samples: ', len(self.train_dataset), 'number of testing samples: ', len(self.test_dataset))
@@ -60,7 +60,7 @@ class Coarse_grained_localization(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         x = batch['spatial_feature']; y = batch['label']; imu = batch['imu']
         y_hat = self.model(x, imu)
-        # print(y_hat.shape, y.shape)
+        print(y_hat.shape, y.shape)
         assert y_hat.shape == y.shape
         if len(y_hat.shape) == 3:
             y_hat = y_hat.reshape(-1, y_hat.shape[-1])

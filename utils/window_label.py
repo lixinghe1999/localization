@@ -26,14 +26,12 @@ def dist2idx(distance):
         return 7
 
 def Region_label(labels, config):
-    total_num_frames = int(config['duration'] / config['frame_duration'])
-    num_class = config['num_class']
-
+    total_num_frames = np.ceil(config['duration'] / config['frame_duration']).astype(int)
     label_window = np.zeros((total_num_frames, 8))
-    for frame, class_idx, _, azimuth, elevation, distance in labels:
+    for frame, _, _, azimuth, elevation, distance in labels:
         azimuth_idx = azimuth2idx(azimuth)
         elevation_idx = elevation2idx(elevation)
-        dist_idx = dist2idx(distance)        
+        dist_idx = dist2idx(distance)      
         frame = int(frame * 0.1 / config['frame_duration'])
         label_window[frame, azimuth_idx] = 1
         label_window[frame, elevation_idx] = 1
