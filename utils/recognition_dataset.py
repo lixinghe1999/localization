@@ -139,6 +139,36 @@ class AudioSet_dataset(Dataset):
                 text = json.load(f)
             output_dict['text'] = text
         return output_dict
+    
+class AudioSet_Singleclass_dataset(AudioSet_dataset):
+    def __init__(self, root='audioset', modality=[], split='eval', sr=16000, duration=10, frame_duration=0.1, label_level='clip'):
+        super().__init__(root, modality, split, sr, duration, frame_duration, label_level)
+        self.active_frame = []
+        for i in range(self.__len__()):
+
+            # solution1: for each frame, we have maximum one class, keep all the other frames to 0
+            segment_id, frame_label = self.frame_labels[i]
+            frame_num_class = np.sum(frame_label, axis=1)
+            active_frame = frame_num_class == 1 # set the other frames to 0
+            frame_label[~active_frame] = 0
+            self.frame_labels[i] = [segment_id, frame_label]
+            # also revise the clip label
+            self.clip_labels[i] = [segment_id, np.max(frame_label, axis=0)]
+
+            # solution2: select one class, only keep the frames with that class
+            # not implemented yet
+
+            self.active_frame.append(active_frame)
+    def __forward__(self, idx):
+        output_dict = super().__getitem__(idx)
+        active_frame = self.active_frame[idx]
+        audio = output_dict['audio']
+        # map the active frame to audio, frame_duration = self.frame_duration
+        frame_audio = audio.reshape(-1, int(self.frame_duration*self.sr))
+        frame_audio = frame_audio[:, active_frame].reshape(-1)
+        output_dict['audio'] = frame_audio
+        return output_dict
+
 
 def dataset_sample(dataset):
     count = 0
@@ -159,10 +189,14 @@ def dataset_sample(dataset):
     print('Overlap frames:', np.mean(overlap_frames))
     print('Number of single label clips:', count, 'total clips:', len(dataset.frame_labels))
 if __name__ == '__main__':
-    dataset = AudioSet_dataset('dataset/audioset', split='eval', modality=['audio'], label_level='clip')
-    print(len(dataset))
-    dataset_sample(dataset)
+    # dataset = AudioSet_dataset('dataset/audioset', split='eval', modality=['audio'], label_level='clip')
+    # print(len(dataset))
+    # dataset_sample(dataset)
+    dataset = AudioSet_Singleclass_dataset('dataset/audioset', split='eval', modality=['audio'], label_level='frame')
 
-
+    for i in range(100):
+        data = dataset.__getitem__(i)
+        frame_num_class = np.sum(data['cls_label'], axis=1)
+        print(np.mean(frame_num_class == 1), np.mean(frame_num_class > 1), np.mean(frame_num_class == 0))
 
 

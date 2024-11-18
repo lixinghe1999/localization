@@ -62,14 +62,6 @@ class AudioRecognition(pl.LightningModule):
         else:
             self.log('val_acc', val_acc)
 
-        # self.validation_step_outputs.append((y_hat, y))
-
-    # def on_validation_epoch_end(self):
-    #     preds = torch.cat([x[0] for x in self.validation_step_outputs], dim=0)
-    #     targets = torch.cat([x[1] for x in self.validation_step_outputs], dim=0)
-    #     val_acc = self.accuracy(preds, targets.long())
-    #     self.log('val_acc', val_acc)
-    #     self.validation_step_outputs.clear()
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.model.parameters(), lr=self.lr)
