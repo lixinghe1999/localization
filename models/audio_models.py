@@ -15,7 +15,6 @@ class Sound_Event_Detector(nn.Module):
         if frame_duration is not None:
             frame_length = int(50 * frame_duration)
             self.backbone = Frame_MobileNet(self.backbone, frame_length)
-            # self.backbone = Frame_Conformer(self.backbone, frame_length)
 
     def forward(self, x, return_fmaps=False):
         if isinstance(x, list):
