@@ -3,8 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
-import asteroid
-
 class ModTanh(torch.nn.Module):
     def __init__(self):
         super().__init__()

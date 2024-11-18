@@ -5,6 +5,7 @@ simulate/ssdata_reverb
 simulate/NIGENS
 simulate/TUT-rare-sound-events-2017-development
 
+device/dataset
 dataset/
 lightning_logs/
 cache/
