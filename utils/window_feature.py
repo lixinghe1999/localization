@@ -12,7 +12,7 @@ def nCr(n, r):
 def spectrogram(audio_input, sr=16000):
     '''
     input: audio_input: (nb_channels, nb_samples)
-    output: (nb_frames, nb_bins, _nb_frames)
+    output: (nb_frames, nb_bins, nb_channels)
     '''
     _nfft = sr // 25; _win_len = sr // 25; _hop_len = sr // 50
     _nb_ch, _nb_sampels = audio_input.shape

@@ -6,6 +6,8 @@ sys.path.append('..')
 from models.seldnet_model import SeldModel
 from models.deepbeam import BeamformerModel
 from models.audio_models import Sound_Event_Detector
+from models.spatialcodec import SpatialCodec_Model
+
 from utils.beamforming_dataset import shift_mixture
 from utils.window_feature import spectrogram, gcc_mel_spec 
 from tqdm import tqdm
@@ -55,6 +57,9 @@ def init_model(model_type='seldnet', ckpt_path=None):
             ckpt = {k.replace('model.', ''): v for k, v in ckpt.items()}
             model.load_state_dict(ckpt)
             print("Recognition Model loaded")
+    elif model_type == 'codec':
+        model = SpatialCodec_Model(n_mics=5)
+    
     return model
 
 def inference_loc(model, data, device):
@@ -79,18 +84,28 @@ def inference_recognition(model, data, device):
     output = model(audio)
     return output
 
+def inference_codec(model, data, device):
+    audio = torch.tensor(data, device=device).float()
+    output = model(audio)
+    return output
 if __name__ == '__main__':
     N_channel = 5
     duration = 5
+    fs = 16000
+    device = 'cuda'
 
-    # fs = 16000
-    # model = init_model(model_type='seldnet', ckpt_path=None)
+    # model = init_model(model_type='codec', ckpt_path=None)
     # dummpy_audio = np.random.randn(N_channel, duration*fs)
-
-    # device = 'cpu'
     # model.to(device)
-    # latency = test_latency(model, dummpy_audio, inference_loc, device, num_test=50)
+    # latency = test_latency(model, dummpy_audio, inference_codec, device, num_test=50)
     # print(f"Latency: {latency}, RTF: {latency / duration}")
+
+
+    model = init_model(model_type='seldnet', ckpt_path=None)
+    dummpy_audio = np.random.randn(N_channel, duration*fs)
+    model.to(device)
+    latency = test_latency(model, dummpy_audio, inference_loc, device, num_test=50)
+    print(f"Latency: {latency}, RTF: {latency / duration}")
 
 
     # fs = 8000
@@ -104,9 +119,9 @@ if __name__ == '__main__':
     # latency = test_latency(model, (dummpy_audio, target_pos), inference_beamforming, device, num_test=50)
     # print(f"Latency: {latency}, RTF: {latency / duration}")
 
-    device = 'cpu'
-    fs = 16000
-    model = init_model(model_type='recognition')
-    dummpy_audio = np.random.randn(1, duration*fs)
-    latency = test_latency(model, (dummpy_audio, None), inference_recognition, device, num_test=50)
-    print(f"Latency: {latency}, RTF: {latency / duration}")
+    # device = 'cpu'
+    # fs = 16000
+    # model = init_model(model_type='recognition')
+    # dummpy_audio = np.random.randn(1, duration*fs)
+    # latency = test_latency(model, (dummpy_audio, None), inference_recognition, device, num_test=50)
+    # print(f"Latency: {latency}, RTF: {latency / duration}")

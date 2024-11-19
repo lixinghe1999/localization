@@ -9,7 +9,7 @@ device/dataset
 dataset/
 lightning_logs/
 cache/
-ckpts
+*.ckpt
 *.json
 *.png
 *.jpg

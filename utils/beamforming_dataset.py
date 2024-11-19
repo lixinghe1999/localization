@@ -180,7 +180,7 @@ class Beamforming_dataset(Dataset):
         source_audio = np.array(source_audio)
         
         # print('mixture_audio shape:', mixture_audio.shape, 'source_audio shape:', source_audio.shape)
-        if self.output_format == 'test':
+        if self.output_format == 'codec':
             pass
         if self.output_format == 'separation':
             # fix to the first channel
