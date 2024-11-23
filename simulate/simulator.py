@@ -145,7 +145,7 @@ class ISM_simulator():
             signals = self.apply_HRTF(signals, doa_degree, ranges)
 
         mixed_signal = np.sum(signals, axis=0)
-        sf.write(out_folder + '.wav', mixed_signal.T, 16000)
+        # sf.write(out_folder + '.wav', mixed_signal.T, 16000)
         for i, s in enumerate(signals):
             os.makedirs(out_folder, exist_ok=True)
             sf.write(out_folder + '/{}.wav'.format(i), s.T, 16000)
@@ -179,7 +179,8 @@ class ISM_simulator():
             room.add_microphone_array(mic_center[:, np.newaxis] + self.mic_array)
 
             max_range = min(room_dim[0]-mic_center[0], mic_center[0], room_dim[1]-mic_center[1], mic_center[1])
-            num_source = sample(range(1, max_source + 1), 1)[0]
+            # num_source = sample(range(1, max_source + 1), 1)[0]
+            num_source = max_source
             sig_index = sample(range(len(dataset)), num_source)
             
 

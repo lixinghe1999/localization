@@ -64,28 +64,35 @@ def shift_mixture(input_data, target_position, sr, inverse=False):
     return input_data, shifts
 
 def beamforming(mixture_audio, source_audio, label, source_files, sr):
-    source_active_azimuth = np.ones(360, dtype=np.int32) * -1
+    source_active_azimuth = np.zeros((len(source_files), 360), dtype=np.int32)
     for l in label:
         azimuth = l[3]
         azimuth_min = azimuth - 10; azimuth_max = azimuth + 10
         if azimuth_min < 0:
-            source_active_azimuth[azimuth_min + 360:360] = l[2]
-            source_active_azimuth[0:azimuth_max] = l[2]
+            source_active_azimuth[l[2], azimuth_min + 360:360] = 1
+            source_active_azimuth[l[2], 0:azimuth_max] = 1
         elif azimuth_max >= 360:
-            source_active_azimuth[azimuth_min:360] = l[2]
-            source_active_azimuth[0:azimuth_max - 360] = l[2]
+            source_active_azimuth[l[2], azimuth_min:360] = 1
+            source_active_azimuth[l[2], 0:azimuth_max - 360] = 1
         else:
-            source_active_azimuth[azimuth_min:azimuth_max] = l[2]
+            source_active_azimuth[l[2], azimuth_min:azimuth_max] = 1
+
     if np.random.uniform() < 0 or len(source_files) < 1 or len(label) < 1: # negative example, output 0
         # return index where the source is not active
-        negative_azimuth = np.where(source_active_azimuth == -1)[0]
+        postive_azimuth = np.max(source_active_azimuth, axis=0)
+        negative_azimuth = np.where(postive_azimuth == 0)[0]
         azimuth = np.random.choice(negative_azimuth)
         source_audio = np.zeros_like(mixture_audio)
     else:
-        postive_azimuth = np.where(source_active_azimuth != -1)[0]
+
+        postive_azimuth = np.max(source_active_azimuth, axis=0)
+        postive_azimuth = np.where(postive_azimuth)[0]
         azimuth = np.random.choice(postive_azimuth)
-        source_idx = source_active_azimuth[azimuth]
-        source_audio = source_audio[source_idx]
+        source_idx = source_active_azimuth[:, azimuth]
+        # mask the source_audio by source_idx
+        source_audio = source_audio[source_idx == 1]
+        source_audio = np.sum(source_audio, axis=0).astype(np.float32)
+
     target_pos = np.array([np.cos(np.deg2rad(azimuth)), np.sin(np.deg2rad(azimuth))])
     mixture_audio, shifts = shift_mixture(mixture_audio, target_pos, sr)
 
@@ -139,7 +146,7 @@ class Beamforming_dataset(Dataset):
                 continue
             if len(label.shape) == 1:
                 label = label[np.newaxis, :]
-            audio_file = os.path.join(self.data_folder, label_name[:-4] + '.wav')
+            audio_file = os.path.join(self.data_folder, label_name[:-4] + '/0.wav')
             max_frame = int(librosa.get_duration(path=audio_file) * 10)
             frame_duration = int(self.duration * 10)
             for start_frame in range(0, max_frame, frame_duration):
@@ -160,9 +167,9 @@ class Beamforming_dataset(Dataset):
         label_name, start_frame, end_frame, label = self.crop_labels[index]
         start_frame_audio = start_frame / 10
         audio_name = os.path.join(self.data_folder, label_name)
-        mixture_audio, sr = librosa.load(audio_name[:-4] + '.wav', sr=self.sr, mono=False, offset=start_frame_audio, duration=self.duration)
-        if mixture_audio.shape[-1] < self.duration * self.sr:
-                mixture_audio = np.pad(mixture_audio, ((0, 0), (0, self.duration * self.sr - mixture_audio.shape[-1])))
+        # mixture_audio, sr = librosa.load(audio_name[:-4] + '.wav', sr=self.sr, mono=False, offset=start_frame_audio, duration=self.duration)
+        # if mixture_audio.shape[-1] < self.duration * self.sr:
+        #         mixture_audio = np.pad(mixture_audio, ((0, 0), (0, self.duration * self.sr - mixture_audio.shape[-1])))
 
         source_audio = []
         source_files = os.listdir(audio_name[:-4])
@@ -174,10 +181,13 @@ class Beamforming_dataset(Dataset):
                 if source.shape[-1] < self.duration * self.sr:
                     source = np.pad(source, ((0, 0), (0, self.duration * self.sr - source.shape[-1])))
             else:
-                n_channel = mixture_audio.shape[0]
+                n_channel = source.shape[0]
                 source = np.zeros((n_channel, self.duration * self.sr))
             source_audio.append(source)
         source_audio = np.array(source_audio)
+        # get gain for each source
+
+        mixture_audio = np.sum(source_audio, axis=0).astype(np.float32)
         
         # print('mixture_audio shape:', mixture_audio.shape, 'source_audio shape:', source_audio.shape)
         if self.output_format == 'codec':

@@ -11,7 +11,7 @@ if __name__ == "__main__":
     parser.add_argument('--device', type=str, default='smartglass', choices=['earphone', 'smartglass'])
     parser.add_argument('--max_source', type=int, default=1)
     parser.add_argument('--min_diff', type=int, default=45)
-    parser.add_argument('--num_data', type=int, default=10000)
+    parser.add_argument('--num_data', type=int, default=2000)
     parser.add_argument('--sr', type=int, default=16000)
 
     args = parser.parse_args()

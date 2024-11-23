@@ -14,12 +14,14 @@ from utils.recognition_dataset import AudioSet_dataset, AudioSet_Singleclass_dat
 
 class AudioSet_dataset_simulation(Dataset):
     def __init__(self, root='../dataset/audioset', split='train', sr=16000):
-        # self.dataset = AudioSet_dataset(root, split=split, modality='audio', label_level='frame')
-        self.dataset = AudioSet_Singleclass_dataset(root, split=split, modality='audio', label_level='frame')
+        self.dataset = AudioSet_dataset(root, split=split, modality='audio', label_level='frame')
+        # self.dataset = AudioSet_Singleclass_dataset(root, split=split, modality='audio', label_level='frame')
     def __len__(self):
         return len(self.dataset)
     def __getitem__(self, idx):
-        audio, label = self.dataset.__getitem__(idx)
+        output_dict = self.dataset.__getitem__(idx)
+        audio = output_dict['audio']
+        label = output_dict['cls_label']
         inactive_frame = np.sum(label, axis=1) == 0
         active_frame = np.sum(label, axis=1) >= 1
 
@@ -80,7 +82,8 @@ class TIMIT_dataset(Dataset):
         return len(self.data)
     def __getitem__(self, idx):
         audio = librosa.load(self.data[idx], sr=self.sr)[0]
-        return audio, 0, (None, None) 
+        active_frames = np.ones(int(len(audio) / self.sr / 0.1))
+        return audio, 0, active_frames
 class ESC50(Dataset):
     def __init__(self, root='ESC-50-master', split='TRAIN', sr=16000):
         root = os.path.join(root, 'audio')

@@ -37,20 +37,20 @@ class AudioSet_dataset(Dataset):
         self.num_classes = len(self.label_map)
         print('Number of classes:', self.num_classes)
 
-        # only keep 10 classes
-        num_segment = len(labels)
-        select_classes = range(10)
-        for segment_id in list(labels.keys()):
-            new_labels = []
-            for start, end, label in labels[segment_id]:
-                label_idx = self.label_map[label]
-                if label_idx in select_classes:
-                    new_labels.append([start, end, label])
-            if len(new_labels) > 0:
-                labels[segment_id] = new_labels   
-            else:
-                del labels[segment_id]
-        print('select classes from', select_classes, 'Number of segments:', len(labels), 'before filtering', num_segment)
+        # # only keep 10 classes
+        # num_segment = len(labels)
+        # select_classes = range(10)
+        # for segment_id in list(labels.keys()):
+        #     new_labels = []
+        #     for start, end, label in labels[segment_id]:
+        #         label_idx = self.label_map[label]
+        #         if label_idx in select_classes:
+        #             new_labels.append([start, end, label])
+        #     if len(new_labels) > 0:
+        #         labels[segment_id] = new_labels   
+        #     else:
+        #         del labels[segment_id]
+        # print('select classes from', select_classes, 'Number of segments:', len(labels), 'before filtering', num_segment)
         
 
         ontology = pd.read_csv(os.path.join(root, 'mid_to_display_name.tsv'), sep='\t', names=['mid', 'display_name'])
@@ -155,9 +155,6 @@ class AudioSet_Singleclass_dataset(AudioSet_dataset):
             # also revise the clip label
             self.clip_labels[i] = [segment_id, np.max(frame_label, axis=0)]
 
-            # solution2: select one class, only keep the frames with that class
-            # not implemented yet
-
             self.active_frame.append(active_frame)
     def __forward__(self, idx):
         output_dict = super().__getitem__(idx)
@@ -170,33 +167,72 @@ class AudioSet_Singleclass_dataset(AudioSet_dataset):
         return output_dict
 
 
-def dataset_sample(dataset):
-    count = 0
-    inactive_frames = []; single_class_frames = []; overlap_frames = []
-    for segment_id, label in dataset.frame_labels:
-        print(segment_id, label.shape)
-        inactive_frame = np.sum(label, axis=1) == 0
-        single_class_frame = np.sum(label, axis=1) == 1
-        overlap_frame = np.sum(label, axis=1) > 1
+def find_similar_classes(classes_name):
+    import laion_clap
+    import numpy as np
+    '''
+    Given a list of classes, find the similar clusters = 20
+    '''
+    model = laion_clap.CLAP_Module(enable_fusion=False)
+    model.load_ckpt() 
+    text_embed = model.get_text_embedding(classes_name)
+    
+    from sklearn.cluster import KMeans
+    kmeans = KMeans(n_clusters=20, random_state=0).fit(text_embed)
+    labels = kmeans.labels_
+    return labels
 
-        inactive_frames.append(np.mean(inactive_frame))
-        single_class_frames.append(np.mean(single_class_frame))
-        overlap_frames.append(np.mean(overlap_frame))
-        if np.mean(single_class_frame) == 1:
-            count += 1
-    print('Inactive frames:', np.mean(inactive_frames))
-    print('Single class frames:', np.mean(single_class_frames))
-    print('Overlap frames:', np.mean(overlap_frames))
-    print('Number of single label clips:', count, 'total clips:', len(dataset.frame_labels))
+def split_audioset_into_classwise():
+    import shutil
+
+    dataset = AudioSet_dataset('../dataset/audioset', split='eval', modality=['audio'], label_level='clip')
+
+    classes_name = dataset.class_map
+    # classes_label = find_similar_classes(classes_name)
+    # cluster_info = {}
+    # for cluster in range(20):
+    #     classes_cluster = np.where(classes_label == cluster)[0]
+    #     print([classes_name[class_idx] for class_idx in classes_cluster])
+    #     data_segments = []
+    #     for segment_id, label in dataset.clip_labels:
+    #         if np.sum(label[classes_cluster]) > 0:
+    #             data_segments.append(segment_id,)
+    #     print('Number of segments for cluster', cluster, len(data_segments), classes_cluster)
+    # dataset_folder = '../dataset/audioset/audioset_classwise/' + str(cluster)
+    
+    cluster_info = {} # one class one cluster
+    for class_idx in range(len(classes_name)):
+        class_name = classes_name[class_idx]
+        data_segments = []
+        for segment_id, label in dataset.clip_labels:
+            if np.sum(label[class_idx]) > 0:
+                data_segments.append(segment_id,)
+        print('Number of segments for cluster', class_idx, class_name, len(data_segments))
+        dataset_folder = '../dataset/audioset/audioset_classwise/' + class_name
+        os.makedirs(dataset_folder, exist_ok=True) 
+        for segment_id in data_segments: 
+            audio_file = os.path.join(dataset.audio_dir, segment_id + '.flac')
+            output_file = os.path.join(dataset_folder, segment_id + '.flac')
+            # copy the audio file
+            shutil.copy(audio_file, output_file)
+    #     cluster_info[class_idx] = class_name
+    # with open('../dataset/audioset/audioset_classwise/cluster_info.json', 'w') as f:
+    #     json.dump(cluster_info, f, indent=4)
+
+            
+
+
+
+
 if __name__ == '__main__':
     # dataset = AudioSet_dataset('dataset/audioset', split='eval', modality=['audio'], label_level='clip')
     # print(len(dataset))
     # dataset_sample(dataset)
-    dataset = AudioSet_Singleclass_dataset('dataset/audioset', split='eval', modality=['audio'], label_level='frame')
+    # dataset = AudioSet_Singleclass_dataset('dataset/audioset', split='eval', modality=['audio'], label_level='frame')
 
-    for i in range(100):
-        data = dataset.__getitem__(i)
-        frame_num_class = np.sum(data['cls_label'], axis=1)
-        print(np.mean(frame_num_class == 1), np.mean(frame_num_class > 1), np.mean(frame_num_class == 0))
+    # for i in range(100):
+    #     data = dataset.__getitem__(i)
+    #     frame_num_class = np.sum(data['cls_label'], axis=1)
+    #     print(np.mean(frame_num_class == 1), np.mean(frame_num_class > 1), np.mean(frame_num_class == 0))
 
-
+    split_audioset_into_classwise()
