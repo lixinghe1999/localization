@@ -16,7 +16,7 @@ class AudioRecognition(pl.LightningModule):
         super().__init__()
         if train_dataset is None or test_dataset is None: # load default dataset
             root = os.path.join('dataset', 'audioset')
-            dataset = AudioSet_dataset(root=root, split='eval', frame_duration=0.1, modality=['audio'], label_level='clip')
+            dataset = AudioSet_dataset(root=root, split='eval', frame_duration=0.1, modality=['audio'], label_level='frame')
             self.train_dataset, self.test_dataset = random_split(dataset, [int(len(dataset)*0.8), len(dataset)-int(len(dataset)*0.8)])
             self.train_dataset.num_classes = dataset.num_classes
             self.test_dataset.num_classes = dataset.num_classes
@@ -28,7 +28,8 @@ class AudioRecognition(pl.LightningModule):
        
         print('number of training samples: ', len(self.train_dataset), 'number of testing samples: ', len(self.test_dataset))
 
-        self.model = Sound_Event_Detector(model_name, self.train_dataset.num_classes, frame_duration=None)
+        self.model = Sound_Event_Detector(model_name, self.train_dataset.num_classes, frame_duration=0.1)
+        # self.model = Sound_Event_Detector(model_name, 4, frame_duration=None)
         self.lr = lr
         self.task = 'multilabel' # ['multilabel', 'multiclass']
         if self.task == 'multiclass':
@@ -80,10 +81,10 @@ class AudioRecognition(pl.LightningModule):
         return torch.utils.data.DataLoader(self.test_dataset, batch_size=4, shuffle=False, num_workers=4)  
 
 if __name__ == "__main__":
-    trainer = pl.Trainer(max_epochs=5, devices=1)
+    trainer = pl.Trainer(max_epochs=5, devices=[1])
 
     model = AudioRecognition()
-    trainer.fit(model)
+    # trainer.fit(model)
     
     # ckpt = 'lightning_logs/frame_1/checkpoints/epoch=9-step=6700.ckpt'
     # model = AudioRecognition.load_from_checkpoint(ckpt)

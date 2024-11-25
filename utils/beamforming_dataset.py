@@ -134,7 +134,7 @@ class Beamforming_dataset(Dataset):
         self.duration = self.config['duration']
         self.output_format = self.config['output_format']
         self.max_sources = self.config['max_sources']
-        self.framewise_meta()
+        self.framewise_meta() 
     def framewise_meta(self):
         '''
         split the full audio into small chunks, defined by the duration

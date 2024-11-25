@@ -6,10 +6,10 @@ import numpy as np
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', type=str, default='NIGENS', choices=['TIMIT', 'ESC50', 'NIGENS', 'AudioSet'])
+    parser.add_argument('--dataset', type=str, default='AudioSet', choices=['TIMIT', 'ESC50', 'NIGENS', 'AudioSet'])
     parser.add_argument('--save_folder', type=str, required=False, default='../dataset')
     parser.add_argument('--device', type=str, default='smartglass', choices=['earphone', 'smartglass'])
-    parser.add_argument('--max_source', type=int, default=1)
+    parser.add_argument('--max_source', type=int, default=2)
     parser.add_argument('--min_diff', type=int, default=45)
     parser.add_argument('--num_data', type=int, default=2000)
     parser.add_argument('--sr', type=int, default=16000)

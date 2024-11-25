@@ -8,7 +8,6 @@ import pandas as pd
 import librosa
 from PIL import Image
 import json
- 
 
 
 class AudioSet_dataset(Dataset):
@@ -37,31 +36,11 @@ class AudioSet_dataset(Dataset):
         self.num_classes = len(self.label_map)
         print('Number of classes:', self.num_classes)
 
-        # # only keep 10 classes
-        # num_segment = len(labels)
-        # select_classes = range(10)
-        # for segment_id in list(labels.keys()):
-        #     new_labels = []
-        #     for start, end, label in labels[segment_id]:
-        #         label_idx = self.label_map[label]
-        #         if label_idx in select_classes:
-        #             new_labels.append([start, end, label])
-        #     if len(new_labels) > 0:
-        #         labels[segment_id] = new_labels   
-        #     else:
-        #         del labels[segment_id]
-        # print('select classes from', select_classes, 'Number of segments:', len(labels), 'before filtering', num_segment)
-        
+        ontolog = os.path.join(root, 'ontology.json')
+        ontolog = json.load(open(ontolog))
+        self.ontology = {v['id']: v for v in ontolog}
+        self.mid_to_name = {mid: self.ontology[mid]['name'] for mid in self.ontology}
 
-        ontology = pd.read_csv(os.path.join(root, 'mid_to_display_name.tsv'), sep='\t', names=['mid', 'display_name'])
-        self.ontology = {}
-        for row in ontology.itertuples():
-            self.ontology[row.mid] = row.display_name
-        self.class_map = ['unknown'] * self.num_classes
-        for k in self.label_map:
-            cls_idx = self.label_map[k]
-            if k in self.ontology:
-                self.class_map[cls_idx] = self.ontology[k]
 
         self.sr = sr
         self.duration = duration
@@ -70,15 +49,22 @@ class AudioSet_dataset(Dataset):
         self.label_level = label_level
 
         self.clip_labels = []; self.frame_labels = []
+        max_count = 5; self.count_labels = []
         self.num_frames_per_clip = int(duration / self.frame_duration)
         for segment_id in labels:
             clip_label = np.zeros(self.num_classes, dtype=np.float32)
+            count_label = np.zeros(self.num_frames_per_clip, dtype=np.int16)
             frame_label = np.zeros((self.num_frames_per_clip, self.num_classes), dtype=np.float32)
             for start, end, label in labels[segment_id]:
                 clip_label[self.label_map[label]] = 1
                 start_frame = int(start/ self.frame_duration)
                 end_frame = int(end/ self.frame_duration)
                 frame_label[start_frame:end_frame, self.label_map[label]] = 1
+                count_label[start_frame:end_frame] += 1
+            # convert count_label to classification label
+            # one_hot_count_label = np.zeros((self.num_frames_per_clip, max_count + 1), dtype=np.float32)
+            # one_hot_count_label[np.arange(count_label.shape[0]), count_label] = 1
+            # self.count_labels.append([segment_id, one_hot_count_label])        
             self.frame_labels.append([segment_id, frame_label])
             self.clip_labels.append([segment_id, clip_label])
     
@@ -113,8 +99,10 @@ class AudioSet_dataset(Dataset):
         output_dict = {}
         if self.label_level == 'frame':
             segment_id, label = self.frame_labels[idx]
-        else:
+        elif self.label_level == 'clip':
             segment_id, label = self.clip_labels[idx]
+        else:
+            segment_id, label = self.count_labels[idx]
 
         audio_file = os.path.join(self.audio_dir, segment_id + '.flac')
         # duration = librosa.get_duration(path=audio_file)
