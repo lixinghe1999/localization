@@ -27,11 +27,8 @@ class CodecLightningModule(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         data, labels = batch
-        print('data', data.shape)
         outputs = self(data)
-        print('outputs', outputs.shape)
         eval_dict = self.evaluation(outputs.cpu().numpy(), labels.cpu().numpy())
-
         return eval_dict
 
     def configure_optimizers(self):
@@ -46,11 +43,11 @@ if __name__ == '__main__':
     config = { "train_datafolder": "dataset/smartglass/AudioSet_2/train",
                 "test_datafolder": "dataset/smartglass/AudioSet_2/test",
                 "ckpt": "",
-                "duration": 5,
+                "duration": 10,
                 "batch_size": 4,
                 "output_format": "codec",
                 "sample_rate": 16000,
-                "max_sources": 8,
+                "max_sources": 2,
             }
     train_dataset = Beamforming_dataset(config['train_datafolder'], config,)
     val_dataset = Beamforming_dataset(config['test_datafolder'], config,)

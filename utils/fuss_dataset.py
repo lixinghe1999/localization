@@ -22,7 +22,7 @@ class FUSSDataset(Dataset):
 
     dataset_name = "FUSS"
 
-    def __init__(self, dataset_path, file_list_path, n_src=2, duration=5, sample_rate=16000, return_bg=False):
+    def __init__(self, dataset_path, file_list_path, n_src=2, duration=5, sample_rate=16000, return_bg=False, mode='separation'):
         super().__init__()
         # Arguments
         self.dataset_path = dataset_path
@@ -32,6 +32,7 @@ class FUSSDataset(Dataset):
         self.n_src = n_src  # Same variable as in WHAM
         self.sample_rate = sample_rate
         self.num_samples = self.sample_rate * duration
+        self.mode = mode
 
         # Load the file list as a dataframe
         # FUSS has a maximum of 3 foregrounds, make column names
@@ -66,11 +67,27 @@ class FUSSDataset(Dataset):
         sources = sources[:self.n_src]
         mix = np.sum(sources, axis=0).astype(np.float32)
         sources = torch.from_numpy(np.vstack(sources))
+        if self.mode == 'separation':
+            pass
+        elif self.mode == 'clap':
+            if num_sources == 0:
+                clap_embedding = np.zeros((1, 512), dtype=np.float32)
+                sources = sources[0][None, :]
+            else:
+                clap = np.load(self.dataset_path + line["mix"][:-4] + '_sources.npy')
+                source_idx = np.random.randint(0, min(num_sources, self.n_src))
+                clap_embedding = clap[source_idx + 1][None, :] # the first one is background
+                sources = sources[source_idx][None, :]
+            clap_embedding = torch.from_numpy(clap_embedding)
+
         if self.return_bg:
             bg = sf.read(self.dataset_path + line["bg"], dtype="float32")[0]
             # return torch.from_numpy(mix), sources, torch.from_numpy(bg)
             mix += torch.from_numpy(bg[:self.num_samples])
-        return torch.from_numpy(mix), sources
+        if self.mode == 'separation':
+            return torch.from_numpy(mix), sources
+        else:
+            return (torch.from_numpy(mix), clap_embedding), sources
 
     def get_infos(self):
         """Get dataset infos (for publishing models).

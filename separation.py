@@ -4,6 +4,7 @@ from pytorch_lightning import Trainer
 
 # We train the same model architecture that we used for inference above.
 from asteroid.models import DPRNNTasNet, ConvTasNet, SuDORMRFNet
+from models.clap_separation import CLAP_SuDORMRFNet
 
 # In this example we use Permutation Invariant Training (PIT) and the SI-SDR loss.
 from asteroid.losses import pairwise_neg_sisdr, PITLossWrapper
@@ -16,6 +17,8 @@ from asteroid.data import LibriMix
 from asteroid.engine import System
 from utils.beamforming_dataset import Beamforming_dataset
 from utils.fuss_dataset import FUSSDataset
+from utils.Penalized_PIT_Wrapper import Penalized_PIT_Wrapper
+from utils.Penalized_PIT_Wrapper import pairwise_neg_sisdr_loss as pairwise_neg_sisdr_loss_v2
 import torch
 
 class dynamic_source_wrapper(PITLossWrapper):
@@ -54,38 +57,21 @@ class dynamic_source_wrapper(PITLossWrapper):
         
         
 if __name__ == '__main__':
-    # config = { "train_datafolder": "dataset/smartglass/TIMIT_2/train",
-    #             "test_datafolder": "dataset/smartglass/TIMIT_2/test",
-    #             "ckpt": "",
-    #             "duration": 5,
-    #             "epochs": 20,
-    #             "batch_size": 8,
-    #             "output_format": "separation",
-    #             "sample_rate": 8000,
-    #             "max_sources": 2,
-    #         }
-    # train_dataset = Beamforming_dataset(config['train_datafolder'], config,)
-    # train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=4)
-
-    # test_dataset = Beamforming_dataset(config['test_datafolder'], config,)
-    # test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False, num_workers=4)
-
-    train_dataset = FUSSDataset('dataset/FUSS/ssdata/', 'dataset/FUSS/ssdata/train_example_list.txt', n_src=2, duration=10, sample_rate=8000)
-    test_dataset = FUSSDataset('dataset/FUSS/ssdata/', 'dataset/FUSS/ssdata/validation_example_list.txt', n_src=2, duration=10, sample_rate=8000)
+    train_dataset = FUSSDataset('dataset/FUSS/ssdata/', 'dataset/FUSS/ssdata/train_example_list.txt', n_src=2, 
+                                duration=10, sample_rate=8000, mode='clap')
+    test_dataset = FUSSDataset('dataset/FUSS/ssdata/', 'dataset/FUSS/ssdata/validation_example_list.txt', n_src=2, 
+                               duration=10, sample_rate=8000, mode='clap')
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=8, shuffle=True, num_workers=4)
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=4, shuffle=False, num_workers=4)
 
-    # model = DPRNNTasNet(n_src=3, sample_rate=16000)
-    # model = DPRNNTasNet.from_pretrained('mpariente/DPRNNTasNet-ks2_WHAM_sepclean')
-    # model = ConvTasNet.from_pretrained('JorisCos/ConvTasNet_Libri2Mix_sepclean_8k')
-    # model = ConvTasNet(n_src=2, sample_rate=8000)
-    model = SuDORMRFNet(n_src=2, sample_rate=8000)
-
+    # model = SuDORMRFNet(n_src=2, sample_rate=8000)
+    model = CLAP_SuDORMRFNet(n_src=1, sample_rate=8000)
 
     # PITLossWrapper works with any loss function.
-    loss = dynamic_source_wrapper(pairwise_neg_sisdr, pit_from="pw_mtx")
-    # loss = PITLossWrapper(pairwise_neg_sisdr, pit_from="pw_mtx")
+    # loss = dynamic_source_wrapper(pairwise_neg_sisdr, pit_from="pw_mtx")
+    # loss = Penalized_PIT_Wrapper(pairwise_neg_sisdr_loss_v2, penalty=30)
+    loss = PITLossWrapper(pairwise_neg_sisdr, pit_from="pw_mtx")
 
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
 

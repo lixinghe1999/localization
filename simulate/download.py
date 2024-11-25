@@ -1,6 +1,12 @@
 import pandas as pd
 import os
 import json
+from tqdm import tqdm
+from PIL import Image
+import torch
+import clip
+import numpy as np
+import cv2
 
 dataset_folder = '../dataset/audioset'
 split = 'eval'
@@ -9,6 +15,7 @@ video_folder = f'{dataset_folder}/audioset_{split}_strong'
 text_folder = f'{dataset_folder}/audioset_{split}_strong_text'
 image_folder = f'{dataset_folder}/audioset_{split}_strong_images'
 audio_folder = f'{dataset_folder}/audioset_{split}_strong_audios'
+
 
 os.makedirs(video_folder, exist_ok=True)
 os.makedirs(text_folder, exist_ok=True)
@@ -45,7 +52,7 @@ def download_segment(args):
     os.system(f'yt-dlp --skip-download {youtube_url} -o "{text_folder}/{segment_id}.json" --write-info-json')
 
 
-MODE = 'embedding' # 'download' or 'process'
+MODE = 'audio_embedding' # 'download' or 'process'
 
 if MODE == 'download':
     from multiprocessing import Pool, Manager
@@ -92,13 +99,9 @@ elif MODE == 'preprocess': # process the downloaded files
         #     os.system(f'ffmpeg -i {video_folder}/{existing_file} -vf "select=eq(n\\,5)" -vsync vfr {image_folder}/{plain_fname}.jpg -y')
     print(count)
     # break
-elif MODE == 'embedding':
+elif MODE == 'image_embedding':
     # use openai-clip to embed the image and save the embedding
-    from PIL import Image
-    import torch
-    import clip
-    import numpy as np
-    import cv2
+
 
     embedding_folder = f'{dataset_folder}/audioset_{split}_strong_embeddings'
     os.makedirs(embedding_folder, exist_ok=True)
@@ -108,7 +111,7 @@ elif MODE == 'embedding':
 
     existing_files = [file for file in existing_files if file.endswith('.jpg')]
     # existing_files = [file for file in existing_files if file.endswith('.mp4')]
-    for existing_file in os.listdir(image_folder):
+    for existing_file in existing_files:
         plain_fname = existing_file.split('.')[0]
         image_fname = f'{image_folder}/{existing_file}'
         if image_fname.endswith('.jpg'):
@@ -136,5 +139,8 @@ elif MODE == 'embedding':
                 # print(video_features.shape)
                 np.save(f'{embedding_folder}/{plain_fname}.npy', video_features)
             cap.release()
+
+
+
 
 

@@ -38,7 +38,7 @@ def get_cov_matrix(array_audio, nfft=640, hop_length=320):
     return cov_matrix_upper, ref_stft, features
 
 class SpatialCodec_Model(nn.Module):
-    def __init__(self, n_mics=8):
+    def __init__(self, n_mics=5):
         super(SpatialCodec_Model, self).__init__()
         h = AttrDict({"n_code_groups": 6,
                     "n_codes": 1024,

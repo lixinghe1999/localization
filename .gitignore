@@ -1,12 +1,15 @@
 simulate/HRTF-Database
 simulate/TIMIT
-simulate/ESC-50-master
-simulate/ssdata_reverb
 simulate/NIGENS
-simulate/TUT-rare-sound-events-2017-development
 
 device/dataset
-dataset/
+dataset/6DoFSELDDataset
+dataset/audioset
+dataset/earphone
+dataset/FUSS
+dataset/smartglass
+dataset/starss23
+
 lightning_logs/
 cache/
 *.ckpt
