@@ -101,7 +101,7 @@ def beamforming(mixture_audio, source_audio, label, source_files, sr):
     return mixture_audio, source_audio
 
 def region_beamforming(mixture_audio, source_audio, label, config):
-    number_of_regions = config['max_sources'] # note that it is the number of regions, speakers < regions
+    number_of_regions = config['num_region'] # note that it is the number of regions, speakers < regions
     regions = np.linspace(0, 360, number_of_regions + 1)
             
     region_audio = np.zeros((number_of_regions, config['sample_rate'] * config['duration']), dtype=np.float32)
@@ -181,11 +181,10 @@ class Beamforming_dataset(Dataset):
                 source = np.zeros((n_channel, self.duration * self.sr))
             source_audio.append(source)
         source_audio = np.array(source_audio)
-        # get gain for each source
 
         mixture_audio = np.sum(source_audio, axis=0).astype(np.float32)
         
-        # print('mixture_audio shape:', mixture_audio.shape, 'source_audio shape:', source_audio.shape)
+        print('mixture_audio shape:', mixture_audio.shape, 'source_audio shape:', source_audio.shape)
         if self.output_format == 'codec':
             pass
         if self.output_format == 'separation':

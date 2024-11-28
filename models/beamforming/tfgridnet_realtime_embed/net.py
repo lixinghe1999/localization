@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from .tfgridnet_causal import TFGridNet
+from .tfgridnet_realtime import TFGridNet
 import torch.nn.functional as F
 
 

@@ -24,7 +24,7 @@ class BeamformingLightningModule(pl.LightningModule):
         self.config = config
         # self.model = BeamformerModel(ch_in=5, synth_mid=64, synth_hid=96, block_size=16, kernel=3, synth_layer=4, synth_rep=4, lookahead=0)
         # self.model = FasNetTAC(n_src=config['max_sources'], sample_rate=config['sample_rate'])
-        self.model = Net()
+        self.model = Net(num_src=config['num_region'])
         # self.model = ConvTas_Net(num_mic=5, L=128, N=64, B=16, H=128, P=64, X=8, R=4, causal=True, norm_type='cLN')
         # self.model = CoSNetwork()
         self.loss = SNRLPLoss()
@@ -71,29 +71,29 @@ class BeamformingLightningModule(pl.LightningModule):
         import matplotlib.pyplot as plt
         import soundfile as sf
         self.eval()
-        for batch in test_dataloader:
-            data, label = batch
-            outputs = self(data)
-            loss = self.loss(outputs, label)
-            print('loss:', loss)
-            for b in range(len(data)):
-                label_sample = label[b]; outputs_sample = outputs[b] # (N_channel, T), (1, T), (1, T)             
+        # sample random batch
+        batch = next(iter(test_dataloader))
+        data, label = batch
+        outputs = self(data)
+        loss = self.loss(outputs, label)
+        print('loss:', loss)
+        B, C, T = label.shape
+        print('label shape:', label.shape, 'outputs shape:', outputs.shape)
+        for b in range(B):
+            label_sample = label[b]; outputs_sample = outputs[b] # (N_channel, T), (1, T), (1, T)             
+            max_value = max(label_sample.max(), outputs_sample.max()).item()
+            fig, axs = plt.subplots(C, 2, figsize=(10, 10))
+            for i in range(C):
+                axs[i, 0].plot(label_sample[i, :].numpy(), c='b')
+                axs[i, 1].plot(outputs_sample[i, :].detach().numpy(), c='g')
+                axs[i, 0].set_ylim(-max_value, max_value)
+                axs[i, 1].set_ylim(-max_value, max_value)
 
-                max_value = max(label_sample.max(), outputs_sample.max()).item()
-                fig, axs = plt.subplots(self.config['max_sources'], 2, figsize=(10, 10))
-                for i in range(self.config['max_sources']):
-                    axs[i, 0].plot(label_sample[i, :].numpy(), c='b')
-                    axs[i, 1].plot(outputs_sample[i, :].detach().numpy(), c='g')
-                    axs[i, 0].set_ylim(-max_value, max_value)
-                    axs[i, 1].set_ylim(-max_value, max_value)
+            # sf.write('data.wav', data[0, 0, :].numpy(), 16000)
+            # sf.write('label.wav', label[0, 0, :].numpy(), 16000)
+            # sf.write('outputs.wav', outputs[0, 0, :].detach().numpy(), 16000)
+            plt.savefig(f'./resources/beamforming_vis_{b}.png')
 
-                # sf.write('data.wav', data[0, 0, :].numpy(), 16000)
-                # sf.write('label.wav', label[0, 0, :].numpy(), 16000)
-                # sf.write('outputs.wav', outputs[0, 0, :].detach().numpy(), 16000)
-        
-                plt.savefig('./resources/beamforming_vis.png')
-                break
-            break
 
 if __name__ == '__main__':
 
@@ -110,20 +110,21 @@ if __name__ == '__main__':
                 "batch_size": 4,
                 "output_format": "region",
                 "sample_rate": 16000,
-                "max_sources": 4,
+                "max_sources": 2,
+                "num_region": 8,
             }
     train_dataset = Beamforming_dataset(config['train_datafolder'], config,)
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=4)
 
     test_dataset = Beamforming_dataset(config['test_datafolder'], config,)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False, num_workers=4)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=4)
     
     model = BeamformingLightningModule(config)
 
     trainer = Trainer(max_epochs=config['epochs'], devices=[1])
     trainer.fit(model, train_loader, test_loader)  
 
-    # ckpt_path = 'lightning_logs/version_2/checkpoints/epoch=19-step=10000.ckpt'
+    # ckpt_path = 'lightning_logs/vctk_4/checkpoints/epoch=19-step=50000.ckpt'
     # model.load_state_dict(torch.load(ckpt_path, weights_only=True)['state_dict'])    
     # model.visualize(test_loader)
 

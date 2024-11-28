@@ -2,7 +2,7 @@
 Audio recognition script
 '''
 import pytorch_lightning as pl
-from models.audio_models import Sound_Event_Detector
+from models.recognition.frame_mn import Sound_Event_Detector
 from utils.recognition_dataset import AudioSet_dataset
 from torch.utils.data import random_split
 import torch
