@@ -2,7 +2,7 @@
 from torch import optim
 import pytorch_lightning as pl
 from utils.beamforming_dataset import Beamforming_dataset
-from models.spatialcodec import SpatialCodec_Model
+from models.SpatialCodec.spatialcodec import SpatialCodec_Model
 import torch.nn as nn
 import torch    
 import numpy as np

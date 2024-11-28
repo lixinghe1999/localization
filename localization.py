@@ -4,7 +4,7 @@ import pytorch_lightning as pl
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint
 from utils.localization_dataset import Localization_dataset
-from models.seldnet_model import SeldModel
+from models.localization.seldnet_model import SeldModel
 from utils.window_evaluation import ACCDOA_evaluation, Multi_ACCDOA_evaluation
 from utils.window_loss import ACCDOA_loss, Multi_ACCDOA_loss
 import numpy as np
@@ -81,7 +81,7 @@ class SeldNetLightningModule(pl.LightningModule):
 
 def run_MUSIC(dataset):
     from utils.doa import inference, init
-    from utils.parameter import MIC_ARRAY_SIMULATION
+    from simulate.parameter import MIC_ARRAY_SIMULATION
     algo = init(MIC_ARRAY_SIMULATION, fs=16000, nfft=1600, algorithm='music')
 
     for i in range(len(dataset)):

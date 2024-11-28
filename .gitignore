@@ -9,6 +9,9 @@ dataset/earphone
 dataset/FUSS
 dataset/smartglass
 dataset/starss23
+dataset/NIGENS
+dataset/TIMIT
+dataset/VCTK
 
 lightning_logs/
 cache/

@@ -7,7 +7,7 @@ import torch
 from tqdm import tqdm
 from random import sample
 
-from .parameter import SPEED_OF_SOUND, MIC_ARRAY_SIMULATION
+from simulate.parameter import SPEED_OF_SOUND, SMARTGLASS
 
 def shift_mixture(input_data, target_position, sr, inverse=False):
     """
@@ -34,7 +34,7 @@ def shift_mixture(input_data, target_position, sr, inverse=False):
     #     mic_radius * np.cos(2 * np.pi / num_channels * i),
     #     mic_radius * np.sin(2 * np.pi / num_channels * i),
     # ] for i in range(num_channels)]
-    mic_array = MIC_ARRAY_SIMULATION.T[:, :2]
+    mic_array = SMARTGLASS.T[:, :2]
     # Mic 0 is the canonical position
     distance_mic0 = np.linalg.norm(mic_array[0] - target_position)
     shifts = [0]
@@ -100,7 +100,7 @@ def beamforming(mixture_audio, source_audio, label, source_files, sr):
     source_audio = source_audio[:1, 8:]
     return mixture_audio, source_audio
 
-def region_beamforming(mixture_audio, source_audio, label, number_of_regions, config):
+def region_beamforming(mixture_audio, source_audio, label, config):
     number_of_regions = config['max_sources'] # note that it is the number of regions, speakers < regions
     regions = np.linspace(0, 360, number_of_regions + 1)
             
@@ -167,10 +167,6 @@ class Beamforming_dataset(Dataset):
         label_name, start_frame, end_frame, label = self.crop_labels[index]
         start_frame_audio = start_frame / 10
         audio_name = os.path.join(self.data_folder, label_name)
-        # mixture_audio, sr = librosa.load(audio_name[:-4] + '.wav', sr=self.sr, mono=False, offset=start_frame_audio, duration=self.duration)
-        # if mixture_audio.shape[-1] < self.duration * self.sr:
-        #         mixture_audio = np.pad(mixture_audio, ((0, 0), (0, self.duration * self.sr - mixture_audio.shape[-1])))
-
         source_audio = []
         source_files = os.listdir(audio_name[:-4])
         for i in range(self.max_sources):
@@ -195,7 +191,7 @@ class Beamforming_dataset(Dataset):
         if self.output_format == 'separation':
             # fix to the first channel
             mixture_audio = mixture_audio[0] # [left, T]
-            source_audio = source_audio[:, 0] # [source, left, T]
+            source_audio = source_audio[:, 0] # [source, left, T]            
         elif self.output_format == 'beamforming':
             mixture_audio, source_audio = beamforming(mixture_audio, source_audio, label, source_audio, sr)
         elif self.output_format == 'region':

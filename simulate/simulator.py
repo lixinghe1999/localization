@@ -8,6 +8,7 @@ from tqdm import tqdm
 import soundfile as sf
 import pandas as pd
 from pyroomacoustics import doa, Room, ShoeBox
+from parameter import SMARTGLASS, DUALDEVICE
 
 def plot_coordinates(HRTF, title):
     coords = HRTF.Source.Position.get_values(system="cartesian")
@@ -66,11 +67,12 @@ def random_room(num_room=100, sr=16000):
     return rooms
 
 class ISM_simulator():
-    def __init__(self, mic_array = np.c_[[ 0.08,  0.0, 0.0],
-                                [ -0.08,  0.0, 0.0],
-                                [ 0.08,  -0.1, 0.0],
-                                [ -0.08,  -0.1, 0.0],
-                                [0.0, 0.0, 0.0]] ) -> None:
+    def __init__(self, device, 
+                 ) -> None:
+        if device == 'smartglass':
+            mic_array = SMARTGLASS
+        else: # dual-device
+            mic_array = DUALDEVICE
         self.fs = 16000 
         self.max_order = 10
         self.snr_lb, self.snr_ub = 20, 30
@@ -144,7 +146,7 @@ class ISM_simulator():
         if self.HRTF:
             signals = self.apply_HRTF(signals, doa_degree, ranges)
 
-        mixed_signal = np.sum(signals, axis=0)
+        # mixed_signal = np.sum(signals, axis=0)
         # sf.write(out_folder + '.wav', mixed_signal.T, 16000)
         for i, s in enumerate(signals):
             os.makedirs(out_folder, exist_ok=True)

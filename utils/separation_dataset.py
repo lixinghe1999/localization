@@ -42,9 +42,9 @@ class FUSSDataset(Dataset):
         self.mix_df = pd.read_csv(file_list_path, sep="\t", names=names)
         # Number of foregrounds (fg) vary from 0 to 3
         # This can easily be used to remove mixtures with less than x fg
-        # remove_less_than = n_src + 2
-        # self.mix_df.dropna(thresh=remove_less_than, inplace=True)
-        # self.mix_df.reset_index(inplace=True)
+        remove_less_than = n_src + 2
+        self.mix_df.dropna(thresh=remove_less_than, inplace=True)
+        self.mix_df.reset_index(inplace=True)
         self.mix_df.fillna(value="", inplace=True)
 
     def __len__(self):

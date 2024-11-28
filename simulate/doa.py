@@ -8,7 +8,6 @@ from pyroomacoustics.doa import MUSIC, SRP, TOPS
 import librosa
 import matplotlib.pyplot as plt
 import numpy as np
-from .imu import pyIMU
 import scipy.signal as signal
 import noisereduce as nr
 
@@ -27,19 +26,14 @@ def init(mic_array, fs, nfft, algorithm='music'):
         algo = TOPS(**kwargs)
     return algo
 
-def inference(algo, data, plot=''):
-    audio, imu = data
-    audio = nr.reduce_noise(audio, sr=16000, stationary=True)
-    print(audio.shape)
-    print('Inferencing DOA...')
-    if imu is not None:
-        imu = pyIMU(imu[:, :6])
-
+def inference(algo, data):
+    audio = data
     nfft = algo.nfft
     fs = algo.fs
     predictions = []
 
     intervals = librosa.effects.split(y=audio, top_db=30, ref=1)
+    print(intervals)
     # remove too short intervals
     intervals = [interval for interval in intervals if interval[1] - interval[0] > nfft]
     # convert to nfft time dimension
@@ -60,11 +54,11 @@ def inference(algo, data, plot=''):
     #         stft_segment = stft_signals[:, :, i:i+1]
     #         algo.locate_sources(stft_segment)
     #         predictions_short[i] = np.rad2deg(algo.azimuth_recon[0])
+    predictions = []
     for interval in intervals:
         stft_segment = stft_signals[:, :, interval[0]:interval[1]]
         algo.locate_sources(stft_segment)
         azimuth = np.rad2deg(algo.azimuth_recon[0])
-        xyz = np.array([np.cos(np.deg2rad(azimuth)), np.sin(np.deg2rad(azimuth)), 0])
-        predictions[interval[0]:interval[1]] = np.tile(xyz, (interval[1] - interval[0], 1))
-
+        # xyz = np.array([np.cos(np.deg2rad(azimuth)), np.sin(np.deg2rad(azimuth)), 0])
+        predictions.append([azimuth, interval[0], interval[1]])
     return predictions

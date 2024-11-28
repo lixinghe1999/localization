@@ -3,10 +3,10 @@ import torch
 import time
 import sys
 sys.path.append('..')
-from models.seldnet_model import SeldModel
-from models.deepbeam import BeamformerModel
+from models.localization.seldnet_model import SeldModel
+from models.beamforming.deepbeam.deepbeam import BeamformerModel
 from models.audio_models import Sound_Event_Detector
-from models.spatialcodec import SpatialCodec_Model
+from models.SpatialCodec.spatialcodec import SpatialCodec_Model
 
 from utils.beamforming_dataset import shift_mixture
 from utils.window_feature import spectrogram, gcc_mel_spec 

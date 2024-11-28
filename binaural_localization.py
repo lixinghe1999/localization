@@ -1,6 +1,6 @@
 from utils.localization_dataset import Localization_dataset
 import pytorch_lightning as pl
-from models.seldnet_model import SeldModel, SeldModel_Mobile
+from models.localization.seldnet_model import SeldModel, SeldModel_Mobile
 from torch.utils.data import random_split
 import torch
 import torchmetrics

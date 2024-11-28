@@ -4,10 +4,10 @@ from pytorch_lightning import Trainer
 
 # We train the same model architecture that we used for inference above.
 from asteroid.models import DPRNNTasNet, ConvTasNet, SuDORMRFNet
-from models.clap_separation import CLAP_SuDORMRFNet
+from models.voicefilter import VoiceFilterNet
 
 # In this example we use Permutation Invariant Training (PIT) and the SI-SDR loss.
-from asteroid.losses import pairwise_neg_sisdr, PITLossWrapper
+from asteroid.losses import pairwise_neg_sisdr, PITLossWrapper, singlesrc_neg_sisdr
 
 # MiniLibriMix is a tiny version of LibriMix (https://github.com/JorisCos/LibriMix),
 # which is a free speech separation dataset.
@@ -16,9 +16,7 @@ from asteroid.data import LibriMix
 # Asteroid's System is a convenience wrapper for PyTorch-Lightning.
 from asteroid.engine import System
 from utils.beamforming_dataset import Beamforming_dataset
-from utils.fuss_dataset import FUSSDataset
-from utils.Penalized_PIT_Wrapper import Penalized_PIT_Wrapper
-from utils.Penalized_PIT_Wrapper import pairwise_neg_sisdr_loss as pairwise_neg_sisdr_loss_v2
+from utils.separation_dataset import FUSSDataset
 import torch
 
 class dynamic_source_wrapper(PITLossWrapper):
@@ -58,26 +56,25 @@ class dynamic_source_wrapper(PITLossWrapper):
         
 if __name__ == '__main__':
     train_dataset = FUSSDataset('dataset/FUSS/ssdata/', 'dataset/FUSS/ssdata/train_example_list.txt', n_src=2, 
-                                duration=10, sample_rate=8000, mode='clap')
+                                duration=10, sample_rate=8000, mode='separation')
     test_dataset = FUSSDataset('dataset/FUSS/ssdata/', 'dataset/FUSS/ssdata/validation_example_list.txt', n_src=2, 
-                               duration=10, sample_rate=8000, mode='clap')
+                               duration=10, sample_rate=8000, mode='separation')
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=8, shuffle=True, num_workers=4)
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=4, shuffle=False, num_workers=4)
 
-    # model = SuDORMRFNet(n_src=2, sample_rate=8000)
-    model = CLAP_SuDORMRFNet(n_src=1, sample_rate=8000)
+    model = SuDORMRFNet(n_src=2, num_blocks=4, sample_rate=8000)
+    # model = CLAP_SuDORMRFNet(n_src=1, num_blocks=8, sample_rate=8000)
+    # model = VoiceFilterNet(n_src=1, sample_rate=8000)
 
     # PITLossWrapper works with any loss function.
-    # loss = dynamic_source_wrapper(pairwise_neg_sisdr, pit_from="pw_mtx")
+    # loss = dynamic_source_wrapper(pai  rwise_neg_sisdr, pit_from="pw_mtx")
     # loss = Penalized_PIT_Wrapper(pairwise_neg_sisdr_loss_v2, penalty=30)
     loss = PITLossWrapper(pairwise_neg_sisdr, pit_from="pw_mtx")
 
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
     system = System(model, optimizer, loss, train_loader, test_loader)
-
-    # Train for 1 epoch using a single GPU. If you're running this on Google Colab,
-    # be sure to select a GPU runtime (Runtime → Change runtime type → Hardware accelarator).
-    trainer = Trainer(max_epochs=50, devices=[1])
+    trainer = Trainer(max_epochs=50, devices=[0])
     trainer.fit(system)
+

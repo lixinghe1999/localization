@@ -84,43 +84,40 @@ class TIMIT_dataset(Dataset):
         audio = librosa.load(self.data[idx], sr=self.sr)[0]
         active_frames = np.ones(int(len(audio) / self.sr / 0.1))
         return audio, 0, active_frames
-class ESC50(Dataset):
-    def __init__(self, root='ESC-50-master', split='TRAIN', sr=16000):
-        root = os.path.join(root, 'audio')
+    
+class VCTK_dataset(Dataset):
+    def __init__(self, root, split='train', sr=16000):
+        self.root_dir = os.path.join(root, 'wav48_silence_trimmed')
         self.data = []
         self.sr = sr
-        audio_list = os.listdir(root)
-        if split == 'TRAIN':
-            audio_list = audio_list[:int(len(audio_list)* 0.8)]
+        speakers = os.listdir(self.root_dir)
+        speakers = [speaker for speaker in speakers if speaker.startswith('p')]
+        if split == 'train':
+            speakers = speakers[:int(len(speakers) * 0.8)]
         else:
-            audio_list = audio_list[int(len(audio_list)* 0.8):]
-        for audio in audio_list:
-            class_idx = int(audio[:-4].split('-')[-1])
-            if class_idx < 100:
-                self.data.append(os.path.join(root, audio))
-        self.class_name = ['dog', 'rooster', 'pig', 'cow', 'frog', 'cat', 'hen', 'insects', 'sheep', 'crow',
-                            'rain', 'sea_waves', 'crackling_fire', 'crickets', 'chirping_birds', 'water_drops', 'wind', 'pouring_water', 'toilet_flush', 'thunderstorm',
-                            'crying_baby', 'sneezing', 'clapping', 'breathing', 'coughing', 'footsteps', 'laughing', 'brushing_teeth', 'snoring', 'drinking_sipping',
-                            'door knock', 'mouse click', 'keyboard typing', 'door_wood_knock', 'can_opening', 'washing_machine', 'vacuum_cleaner', 'clock_alarm', 'clock_tick', 'glass_breaking',
-                            'helicopter', 'chainsaw', 'siren', 'car_horn', 'engine', 'train', 'church_bells', 'airplane', 'fireworks', 'hand_saw']
+            speakers = speakers[int(len(speakers) * 0.8):]
+        for speaker in speakers:
+            speaker_folder = os.path.join(self.root_dir, speaker)
+            for audio in os.listdir(speaker_folder):
+                if audio.endswith('.flac'):
+                    self.data.append(os.path.join(speaker_folder, audio))
+        self.class_name = ['speech']
     def __len__(self):
         return len(self.data)
     def __getitem__(self, idx):
-        file_name = self.data[idx]
-        audio = librosa.load(file_name, sr=self.sr)[0]
-        class_idx = int(file_name[:-4].split('-')[-1])
-        return audio, class_idx, (0, 5)
-
+        audio = librosa.load(self.data[idx], sr=self.sr)[0]
+        active_frames = np.ones(int(len(audio) / self.sr / 0.1))
+        return audio, 0, active_frames
 
 def dataset_parser(dataset, relative_path):
     if dataset == 'TIMIT':
         root = os.path.join(relative_path, 'TIMIT')
         train_dataset = TIMIT_dataset(root=root, split='TRAIN')
         test_dataset = TIMIT_dataset(root=root, split='TEST')
-    elif dataset == 'ESC50':
-        root = os.path.join(relative_path, 'ESC-50-master')
-        train_dataset = ESC50(root=root, split='TRAIN')
-        test_dataset = ESC50(root=root, split='TEST')
+    elif dataset == 'VCTK':
+        root = os.path.join(relative_path, 'VCTK')
+        train_dataset = VCTK_dataset(root=root, split='train')
+        test_dataset = VCTK_dataset(root=root, split='test')
     elif dataset == 'NIGENS':
         root = os.path.join(relative_path, 'NIGENS')
         train_dataset = NIGENS_dataset(root=root, split='train')
