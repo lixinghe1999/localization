@@ -10,8 +10,23 @@ import pandas as pd
 import sys
 sys.path.append('..')
 from utils.recognition_dataset import AudioSet_dataset, AudioSet_Singleclass_dataset
+from utils.separation_dataset import FUSSDataset
 
-
+class FUSS_dataset_simulation(Dataset):
+    def __init__(self, root='../dataset/', split='train', sr=16000):
+        if split == 'train':
+            data_list = 'FUSS/ssdata/train_example_list.txt'
+        else:
+            data_list = 'FUSS/ssdata/validation_example_list.txt'
+        data_list = os.path.join(root, data_list)
+        self.dataset = FUSSDataset(data_list)
+    def __len__(self):
+        return len(self.dataset)
+    def __getitem__(self, idx):
+        mixture, sources = self.dataset.__getitem__(idx)
+        active_frame = np.zeros(int(len(mixture) / self.dataset.sample_rate / 0.1))
+        return mixture, 0, active_frame
+    
 class AudioSet_dataset_simulation(Dataset):
     def __init__(self, root='../dataset/audioset', split='train', sr=16000):
         self.dataset = AudioSet_dataset(root, split=split, modality='audio', label_level='frame')
@@ -125,6 +140,9 @@ def dataset_parser(dataset, relative_path):
     elif dataset == 'AudioSet':
         train_dataset = AudioSet_dataset_simulation(split='train')
         test_dataset = AudioSet_dataset_simulation(split='eval')
+    elif dataset == 'FUSS':
+        train_dataset = FUSS_dataset_simulation(split='train')
+        test_dataset = FUSS_dataset_simulation(split='eval')
     return train_dataset, test_dataset
 
 if __name__ == '__main__':

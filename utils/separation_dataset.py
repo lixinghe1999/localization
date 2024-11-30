@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import soundfile as sf
 import librosa
-
+import os
 
 class FUSSDataset(Dataset):
     """Dataset class for FUSS [1] tasks.
@@ -22,9 +22,10 @@ class FUSSDataset(Dataset):
 
     dataset_name = "FUSS"
 
-    def __init__(self, dataset_path, file_list_path, n_src=2, duration=5, sample_rate=16000, return_bg=False, mode='separation'):
+    def __init__(self, file_list_path, n_src=2, duration=5, sample_rate=16000, return_bg=False):
         super().__init__()
         # Arguments
+        dataset_path = os.path.dirname(file_list_path) + '/'
         self.dataset_path = dataset_path
         self.return_bg = return_bg
         # Constants
@@ -32,7 +33,6 @@ class FUSSDataset(Dataset):
         self.n_src = n_src  # Same variable as in WHAM
         self.sample_rate = sample_rate
         self.num_samples = self.sample_rate * duration
-        self.mode = mode
 
         # Load the file list as a dataframe
         # FUSS has a maximum of 3 foregrounds, make column names
@@ -69,17 +69,6 @@ class FUSSDataset(Dataset):
         sources = torch.from_numpy(np.vstack(sources))
         if self.mode == 'separation':
             pass
-        elif self.mode == 'clap':
-            if num_sources == 0:
-                clap_embedding = np.zeros((1, 512), dtype=np.float32)
-                sources = sources[0][None, :]
-            else:
-                clap = np.load(self.dataset_path + line["mix"][:-4] + '_sources.npy')
-                source_idx = np.random.randint(0, min(num_sources, self.n_src))
-                clap_embedding = clap[source_idx + 1][None, :] # the first one is background
-                sources = sources[source_idx][None, :]
-            clap_embedding = torch.from_numpy(clap_embedding)
-
         if self.return_bg:
             bg = sf.read(self.dataset_path + line["bg"], dtype="float32")[0]
             # return torch.from_numpy(mix), sources, torch.from_numpy(bg)

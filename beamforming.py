@@ -5,9 +5,8 @@ import pytorch_lightning as pl
 # We train the same model architecture that we used for inference above.
 
 from models.beamforming import BeamformerModel, ConvTas_Net, Net
-from models.adaptive_loss import SNRLPLoss
 from asteroid.models import FasNetTAC
-from models.localization.cos import CoSNetwork
+from models.adaptive_loss import SNRLPLoss
 
 from asteroid.losses import pairwise_neg_sisdr, singlesrc_neg_sisdr, multisrc_neg_sdsdr, PITLossWrapper
 from torchmetrics.audio import ScaleInvariantSignalNoiseRatio
@@ -25,12 +24,8 @@ class BeamformingLightningModule(pl.LightningModule):
         # self.model = BeamformerModel(ch_in=5, synth_mid=64, synth_hid=96, block_size=16, kernel=3, synth_layer=4, synth_rep=4, lookahead=0)
         # self.model = FasNetTAC(n_src=config['max_sources'], sample_rate=config['sample_rate'])
         self.model = Net(num_src=config['num_region'])
-        # self.model = ConvTas_Net(num_mic=5, L=128, N=64, B=16, H=128, P=64, X=8, R=4, causal=True, norm_type='cLN')
-        # self.model = CoSNetwork()
+
         self.loss = SNRLPLoss()
-        # self.criterion = PITLossWrapper(pairwise_neg_sisdr, pit_from='pw_mtx')
-        # self.criterion = Penalized_PIT_Wrapper(PairwiseNegSDR_Loss("sisdr"))
-        # self.criterion = ScaleInvariantSignalNoiseRatio()
 
     def forward(self, x):
         return self.model(x)
@@ -40,25 +35,12 @@ class BeamformingLightningModule(pl.LightningModule):
         outputs = self(data)
 
         loss = self.loss(outputs, label)
-        # B, S, C, T = outputs.shape
-        # outputs = outputs.permute(0, 2, 1, 3).reshape(B * C, S, T)
-        # label = label.permute(0, 2, 1, 3).reshape(B * C, S, T)
-        # loss = self.criterion(outputs, label)
         self.log('train_loss', loss, on_step=True, prog_bar=True, logger=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         data, label = batch
         outputs = self(data)
-
-        # B, S, C, T = outputs.shape
-        # mixture = data[:, None].repeat(1, 2, 1, 1) # [batch, source, channel, time]
-        # # convert all to [batch * channel, source, time]
-        # mixture = mixture.permute(0, 2, 1, 3).reshape(B * C, S, T)
-        # outputs = outputs.permute(0, 2, 1, 3).reshape(B * C, S, T)
-        # label = label.permute(0, 2, 1, 3).reshape(B * C, S, T)
-        # mixture_loss = -self.criterion(data, label)
-        # self.log('validataion/mixture', mixture_loss, on_epoch=True, prog_bar=True, logger=True)
 
         positive_loss, negative_loss = self.loss(outputs, label)
         self.log('validataion/positive_loss', positive_loss, on_epoch=True, prog_bar=True, logger=True)
@@ -88,10 +70,6 @@ class BeamformingLightningModule(pl.LightningModule):
                 axs[i, 1].plot(outputs_sample[i, :].detach().numpy(), c='g')
                 axs[i, 0].set_ylim(-max_value, max_value)
                 axs[i, 1].set_ylim(-max_value, max_value)
-
-            # sf.write('data.wav', data[0, 0, :].numpy(), 16000)
-            # sf.write('label.wav', label[0, 0, :].numpy(), 16000)
-            # sf.write('outputs.wav', outputs[0, 0, :].detach().numpy(), 16000)
             plt.savefig(f'./resources/beamforming_vis_{b}.png')
 
 
@@ -121,10 +99,10 @@ if __name__ == '__main__':
     
     model = BeamformingLightningModule(config)
 
-    trainer = Trainer(max_epochs=config['epochs'], devices=[1])
-    trainer.fit(model, train_loader, test_loader)  
+    # trainer = Trainer(max_epochs=config['epochs'], devices=[1])
+    # trainer.fit(model, train_loader, test_loader)  
 
-    # ckpt_path = 'lightning_logs/vctk_4/checkpoints/epoch=19-step=50000.ckpt'
-    # model.load_state_dict(torch.load(ckpt_path, weights_only=True)['state_dict'])    
-    # model.visualize(test_loader)
+    ckpt_path = 'lightning_logs/vctk_8/checkpoints/epoch=19-step=50000.ckpt'
+    model.load_state_dict(torch.load(ckpt_path, weights_only=True)['state_dict'])    
+    model.visualize(test_loader)
 

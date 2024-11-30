@@ -184,8 +184,7 @@ class Beamforming_dataset(Dataset):
 
         mixture_audio = np.sum(source_audio, axis=0).astype(np.float32)
         
-        print('mixture_audio shape:', mixture_audio.shape, 'source_audio shape:', source_audio.shape)
-        if self.output_format == 'codec':
+        if self.output_format == 'multichannel_separation':
             pass
         if self.output_format == 'separation':
             # fix to the first channel
