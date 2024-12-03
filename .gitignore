@@ -3,6 +3,8 @@ simulate/TIMIT
 simulate/NIGENS
 
 device/dataset
+
+dataset/FSD50K
 dataset/6DoFSELDDataset
 dataset/audioset
 dataset/earphone

@@ -1,7 +1,7 @@
 '''
 Audioset Strong frame dataset
 '''
-from torch.utils.data import Dataset, ConcatDataset
+from torch.utils.data import Dataset, ConcatDataset, Subset
 import os
 import numpy as np
 import pandas as pd
@@ -49,22 +49,15 @@ class AudioSet_dataset(Dataset):
         self.label_level = label_level
 
         self.clip_labels = []; self.frame_labels = []
-        max_count = 5; self.count_labels = []
         self.num_frames_per_clip = int(duration / self.frame_duration)
         for segment_id in labels:
             clip_label = np.zeros(self.num_classes, dtype=np.float32)
-            count_label = np.zeros(self.num_frames_per_clip, dtype=np.int16)
             frame_label = np.zeros((self.num_frames_per_clip, self.num_classes), dtype=np.float32)
             for start, end, label in labels[segment_id]:
                 clip_label[self.label_map[label]] = 1
                 start_frame = int(start/ self.frame_duration)
                 end_frame = int(end/ self.frame_duration)
                 frame_label[start_frame:end_frame, self.label_map[label]] = 1
-                count_label[start_frame:end_frame] += 1
-            # convert count_label to classification label
-            # one_hot_count_label = np.zeros((self.num_frames_per_clip, max_count + 1), dtype=np.float32)
-            # one_hot_count_label[np.arange(count_label.shape[0]), count_label] = 1
-            # self.count_labels.append([segment_id, one_hot_count_label])        
             self.frame_labels.append([segment_id, frame_label])
             self.clip_labels.append([segment_id, clip_label])
     
@@ -101,8 +94,6 @@ class AudioSet_dataset(Dataset):
             segment_id, label = self.frame_labels[idx]
         elif self.label_level == 'clip':
             segment_id, label = self.clip_labels[idx]
-        else:
-            segment_id, label = self.count_labels[idx]
 
         audio_file = os.path.join(self.audio_dir, segment_id + '.flac')
         # duration = librosa.get_duration(path=audio_file)
@@ -128,31 +119,61 @@ class AudioSet_dataset(Dataset):
             output_dict['text'] = text
         return output_dict
     
-class AudioSet_Singleclass_dataset(AudioSet_dataset):
-    def __init__(self, root='audioset', modality=[], split='eval', sr=16000, duration=10, frame_duration=0.1, label_level='clip'):
-        super().__init__(root, modality, split, sr, duration, frame_duration, label_level)
-        self.active_frame = []
-        for i in range(self.__len__()):
+class FSD50K_dataset(Dataset):
+    def __init__(self, root_dir, split='eval', label_level='clip', sr=16000, duration=10):
+        """
+        Args:
+            root_dir (string): Directory with all the audio files.
+            transform (callable, optional): Optional transform to be applied on a sample.
+        """
+        self.root_dir = os.path.join(root_dir, f'FSD50K.{split}_audio')
+        self.sr = sr
+        self.duration = duration
+        self.label = os.path.join(root_dir, f'FSD50K.ground_truth/{split}.csv')
+        vocabulary = os.path.join(root_dir, 'FSD50K.ground_truth/vocabulary.csv')
+        self.vocabulary = pd.read_csv(vocabulary, names=['name', 'mid'], delimiter=',')
+        # convert to dictionary, key = mid, value = index
+        self.vocabulary = {mid: idx for idx, mid in enumerate(self.vocabulary['mid'])}
+        self.num_classes = len(self.vocabulary)
 
-            # solution1: for each frame, we have maximum one class, keep all the other frames to 0
-            segment_id, frame_label = self.frame_labels[i]
-            frame_num_class = np.sum(frame_label, axis=1)
-            active_frame = frame_num_class == 1 # set the other frames to 0
-            frame_label[~active_frame] = 0
-            self.frame_labels[i] = [segment_id, frame_label]
-            # also revise the clip label
-            self.clip_labels[i] = [segment_id, np.max(frame_label, axis=0)]
+        self.clip_labels = []
+        self.label = pd.read_csv(self.label, delimiter=',',)
+        for i in range(len(self.label)):
+            audio_file = os.path.join(self.root_dir, str(self.label.iloc[i, 0]) + '.wav')
+            labels = self.label.iloc[i, 2]
+            labels = labels.split(',')
+            labels = [self.vocabulary[label] for label in labels]
+            cls_label = np.zeros(self.num_classes, dtype=np.float32)
+            cls_label[labels] = 1
+            self.clip_labels.append([audio_file, cls_label])
 
-            self.active_frame.append(active_frame)
-    def __forward__(self, idx):
-        output_dict = super().__getitem__(idx)
-        active_frame = self.active_frame[idx]
-        audio = output_dict['audio']
-        # map the active frame to audio, frame_duration = self.frame_duration
-        frame_audio = audio.reshape(-1, int(self.frame_duration*self.sr))
-        frame_audio = frame_audio[:, active_frame].reshape(-1)
-        output_dict['audio'] = frame_audio
+    def __len__(self):
+        return len(self.clip_labels)
+
+    def __getitem__(self, idx):
+        output_dict = {}
+        audio_path, label = self.clip_labels[idx]
+        # convert [cls1, cls2] to one-hot encoding by the number of classes
+        audio, _ = librosa.load(audio_path, sr=self.sr)
+        if len(audio) < self.duration * self.sr:
+            audio = np.pad(audio, (0, self.duration*self.sr - len(audio)))
+        else:
+            audio = audio[:self.duration*self.sr]
+
+        output_dict['audio'] = audio
+        output_dict['cls_label'] = label
         return output_dict
+
+def Singleclass_dataset(dataset):
+    keep_idx = []
+    for i, data in enumerate(dataset.clip_labels):
+        _, label = data
+        total_num_classes = np.sum(label, axis=-1)
+        if total_num_classes == 1:
+            keep_idx.append(i)
+    dataset = Subset(dataset, keep_idx)
+    return dataset
+
 
 
 def find_similar_classes(classes_name):

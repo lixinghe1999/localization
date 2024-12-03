@@ -1,8 +1,9 @@
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
-from models.mn.model import get_model as get_mobilenet_model
-from models.mn.model import NAME_TO_WIDTH
-from models.mn.preprocess import AugmentMelSTFT
+from models.recognition.model import get_model as get_mobilenet_model
+from models.recognition.model import NAME_TO_WIDTH
+from models.recognition.preprocess import AugmentMelSTFT
 
 class Sound_Event_Detector(nn.Module):
     def __init__(self, model_name = 'mn10_as', num_classes=527, frame_duration=None):

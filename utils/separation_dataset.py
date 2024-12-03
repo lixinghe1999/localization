@@ -22,12 +22,14 @@ class FUSSDataset(Dataset):
 
     dataset_name = "FUSS"
 
-    def __init__(self, file_list_path, n_src=2, duration=5, sample_rate=16000, return_bg=False):
+    def __init__(self, file_list_path, n_src=2, duration=10, sample_rate=16000, return_bg=False, return_frames=False, return_clap=False):
         super().__init__()
         # Arguments
         dataset_path = os.path.dirname(file_list_path) + '/'
         self.dataset_path = dataset_path
         self.return_bg = return_bg
+        self.return_frames = return_frames
+        self.return_clap = return_clap
         # Constants
         self.max_n_fg = 3
         self.n_src = n_src  # Same variable as in WHAM
@@ -67,16 +69,30 @@ class FUSSDataset(Dataset):
         sources = sources[:self.n_src]
         mix = np.sum(sources, axis=0).astype(np.float32)
         sources = torch.from_numpy(np.vstack(sources))
-        if self.mode == 'separation':
-            pass
+
         if self.return_bg:
             bg = sf.read(self.dataset_path + line["bg"], dtype="float32")[0]
-            # return torch.from_numpy(mix), sources, torch.from_numpy(bg)
             mix += torch.from_numpy(bg[:self.num_samples])
-        if self.mode == 'separation':
-            return torch.from_numpy(mix), sources
+            
+        if self.return_frames:
+            meta_file = self.dataset_path + line["mix"].replace('.wav', '.txt')
+            meta = np.loadtxt(meta_file, delimiter='\t', usecols=(0, 1))
+            active_frame = np.zeros((len(meta), int(self.num_samples / self.sample_rate / 0.1)))
+            for (start, end) in meta:
+                start_idx = int(start / 0.1); end_idx = int(end / 0.1)
+                active_frame[:, start_idx:end_idx] = 1
+            active_frame = active_frame[:self.n_src]
+            return torch.from_numpy(mix), sources, active_frame
+        elif self.return_clap:
+            clap = np.load(self.dataset_path + line["mix"][:-4] + '_sources.npy')
+            # clap = clap[:self.n_src]
+            source_idx = np.random.choice(self.n_src, 1)
+            clap = clap[source_idx]
+            sources = sources[source_idx]
+            return (torch.from_numpy(mix), torch.from_numpy(clap)), sources, 
         else:
-            return (torch.from_numpy(mix), clap_embedding), sources
+            return torch.from_numpy(mix), sources
+    
 
     def get_infos(self):
         """Get dataset infos (for publishing models).

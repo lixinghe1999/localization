@@ -9,8 +9,10 @@ import pandas as pd
 
 import sys
 sys.path.append('..')
-from utils.recognition_dataset import AudioSet_dataset, AudioSet_Singleclass_dataset
+from utils.recognition_dataset import AudioSet_dataset, FSD50K_dataset, Singleclass_dataset
 from utils.separation_dataset import FUSSDataset
+
+
 
 class FUSS_dataset_simulation(Dataset):
     def __init__(self, root='../dataset/', split='train', sr=16000):
@@ -19,25 +21,39 @@ class FUSS_dataset_simulation(Dataset):
         else:
             data_list = 'FUSS/ssdata/validation_example_list.txt'
         data_list = os.path.join(root, data_list)
-        self.dataset = FUSSDataset(data_list)
+        self.dataset = FUSSDataset(data_list, return_frames=True)
     def __len__(self):
         return len(self.dataset)
     def __getitem__(self, idx):
-        mixture, sources = self.dataset.__getitem__(idx)
-        active_frame = np.zeros(int(len(mixture) / self.dataset.sample_rate / 0.1))
-        return mixture, 0, active_frame
+        _, sources, active_frame = self.dataset.__getitem__(idx)
+        source_idx = np.random.choice(len(sources))
+        source = sources[source_idx]; active_frame = active_frame[source_idx]
+        return source, 0, active_frame
     
+class FSD50K_dataset_simulation(Dataset):
+    def __init__(self, root='../dataset/', split='train', sr=16000):
+        if split == 'train':
+            self.dataset = FSD50K_dataset(root + 'FSD50K', split='dev')
+        else:
+            self.dataset = FSD50K_dataset(root + 'FSD50K', split='eval')
+        self.dataset = Singleclass_dataset(self.dataset)
+    def __len__(self):
+        return len(self.dataset)
+    def __getitem__(self, idx):
+        _, sources, active_frame = self.dataset.__getitem__(idx)
+        source_idx = np.random.choice(len(sources))
+        source = sources[source_idx]; active_frame = active_frame[source_idx]
+        return source, 0, active_frame
+
 class AudioSet_dataset_simulation(Dataset):
     def __init__(self, root='../dataset/audioset', split='train', sr=16000):
         self.dataset = AudioSet_dataset(root, split=split, modality='audio', label_level='frame')
-        # self.dataset = AudioSet_Singleclass_dataset(root, split=split, modality='audio', label_level='frame')
     def __len__(self):
         return len(self.dataset)
     def __getitem__(self, idx):
         output_dict = self.dataset.__getitem__(idx)
         audio = output_dict['audio']
         label = output_dict['cls_label']
-        inactive_frame = np.sum(label, axis=1) == 0
         active_frame = np.sum(label, axis=1) >= 1
 
         return audio, 0, active_frame

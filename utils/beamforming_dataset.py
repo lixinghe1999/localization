@@ -157,7 +157,6 @@ class Beamforming_dataset(Dataset):
                         mini_chunk.append(l)
                 mini_chunk = np.array(mini_chunk)
                 if len(mini_chunk) > 0: 
-                    # if np.max(mini_chunk[:, 1]) <= 50: # only the first 50 classes
                     self.crop_labels.append((label_name, start_frame, end_frame, mini_chunk))
         print('Total crop labels:', len(self.crop_labels))
     def __len__(self):
@@ -185,7 +184,9 @@ class Beamforming_dataset(Dataset):
         mixture_audio = np.sum(source_audio, axis=0).astype(np.float32)
         
         if self.output_format == 'multichannel_separation':
-            pass
+            # only test with two channels
+            mixture_audio = mixture_audio[:] 
+            source_audio = source_audio[:, :]  
         if self.output_format == 'separation':
             # fix to the first channel
             mixture_audio = mixture_audio[0] # [left, T]
