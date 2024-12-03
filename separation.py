@@ -4,8 +4,6 @@ from pytorch_lightning import Trainer
 
 # We train the same model architecture that we used for inference above.
 from asteroid.models import DPRNNTasNet, ConvTasNet, SuDORMRFNet
-from models.separation import SemanticHearingNet
-from models.separation.multichannel_sep import MultiChannel_Sep
 
 # In this example we use Permutation Invariant Training (PIT) and the SI-SDR loss.
 from asteroid.losses import pairwise_neg_sisdr, PITLossWrapper, singlesrc_neg_sisdr, multisrc_neg_sisdr
@@ -13,9 +11,6 @@ from asteroid.losses import pairwise_neg_sisdr, PITLossWrapper, singlesrc_neg_si
 # MiniLibriMix is a tiny version of LibriMix (https://github.com/JorisCos/LibriMix),
 # which is a free speech separation dataset.
 
-# Asteroid's System is a convenience wrapper for PyTorch-Lightning.
-from asteroid.engine import System
-from utils.beamforming_dataset import Beamforming_dataset
 from utils.separation_dataset import FUSSDataset
 import torch
 import pytorch_lightning as pl
@@ -25,24 +20,8 @@ class SeparationLightningModule(pl.LightningModule):
         super(SeparationLightningModule, self).__init__()
         self.config = config
         if self.config['output_format'] == 'separation':
-            # self.model = SuDORMRFNet(n_src=2, num_blocks=8, sample_rate=config['sample_rate'])
-            self.model = SemanticHearingNet(label_len=512)
+            self.model = SuDORMRFNet(n_src=2, num_blocks=8, sample_rate=config['sample_rate'])
             self.loss = PITLossWrapper(pairwise_neg_sisdr, pit_from="pw_mtx")
-        else:
-            self.model = MultiChannel_Sep('SuDORMRFNet', n_channel=1, n_src=2, sample_rate=config['sample_rate'])
-            if config['end2end']:
-                ckpt = 'lightning_logs/separation/fuss_sudormrfnet_16k/checkpoints/epoch=19-step=100000.ckpt'
-                ckpt = torch.load(ckpt, weights_only=True)['state_dict']
-                # remove model. prefix
-                ckpt = {k[6:]: v for k, v in ckpt.items()}
-                self.model.separator.load_state_dict(ckpt, strict=True)
-                print('load pretrained separator')
-                # freeze the separator
-                for param in self.model.separator.parameters():
-                    param.requires_grad = False
-                self.loss = PITLossWrapper(pairwise_neg_sisdr, pit_from="pw_mtx")
-            else:
-                self.loss = multisrc_neg_sisdr
 
     def training_step(self, batch, batch_idx):
         data, label = batch
@@ -50,19 +29,6 @@ class SeparationLightningModule(pl.LightningModule):
             outputs = self.model(data)
             loss = self.loss(outputs, label)
             self.log('train_loss', loss, on_step=True, prog_bar=True, logger=True)
-        else:
-            if self.config['end2end']:
-                outputs = self.model(data)
-                B, S, C, T = outputs.shape
-                outputs = outputs.permute(0, 2, 1, 3).reshape(B * C, S, T)
-                label = label.permute(0, 2, 1, 3).reshape(B * C, S, T)
-                loss = self.loss(outputs, label)
-            else:
-                outputs = self.model(data, label[:, :, 0])
-                B, S, C, T = outputs.shape
-                outputs = outputs.reshape(B, S * C, T); label = label.reshape(B, S * C, T)
-                loss = self.loss(outputs, label).mean()
-            self.log('train_loss', loss, on_step=True, prog_bar=True, logger=True)         
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -70,19 +36,6 @@ class SeparationLightningModule(pl.LightningModule):
         if self.config['output_format'] == 'separation':
             outputs = self.model(data)
             loss = self.loss(outputs, label)
-        else:
-            if self.config['end2end']:
-                outputs = self.model(data)
-                B, S, C, T = outputs.shape
-                outputs = outputs.permute(0, 2, 1, 3).reshape(B * C, S, T)
-                label = label.permute(0, 2, 1, 3).reshape(B * C, S, T)
-                loss = self.loss(outputs, label)
-            else:
-                outputs = self.model(data, label[:, :, 0])
-                B, S, C, T = outputs.shape
-                outputs = outputs.reshape(B, S * C, T); label = label.reshape(B, S * C, T)
-                loss = self.loss(outputs, label).mean()
-        print(loss.item())
         self.log('validation_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)      
 
     def configure_optimizers(self):
@@ -90,22 +43,6 @@ class SeparationLightningModule(pl.LightningModule):
   
 
 if __name__ == '__main__':
-
-    # config = { 
-    #             "train_datafolder": "dataset/smartglass/FUSS_2/train",
-    #             "test_datafolder": "dataset/smartglass/FUSS_2/test",
-    #             "duration": 10,
-    #             "epochs": 20,
-    #             "batch_size": 4,
-    #             "output_format": "multichannel_separation",
-    #             "sample_rate": 16000,
-    #             "max_sources": 2,
-    #             "num_region": 8,
-    #             "end2end": True
-    #         }
-    # train_dataset = Beamforming_dataset(config['train_datafolder'], config,)
-    # test_dataset = Beamforming_dataset(config['test_datafolder'], config,)
-
     
     config = { 
                 "train_datafolder": 'dataset/FUSS/ssdata/train_example_list.txt',

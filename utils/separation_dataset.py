@@ -22,7 +22,7 @@ class FUSSDataset(Dataset):
 
     dataset_name = "FUSS"
 
-    def __init__(self, file_list_path, n_src=2, duration=10, sample_rate=16000, return_bg=False, return_frames=False, return_clap=False):
+    def __init__(self, file_list_path, n_src=2, duration=10, sample_rate=16000, return_bg=False):
         super().__init__()
         # Arguments
         dataset_path = os.path.dirname(file_list_path) + '/'
@@ -73,25 +73,7 @@ class FUSSDataset(Dataset):
         if self.return_bg:
             bg = sf.read(self.dataset_path + line["bg"], dtype="float32")[0]
             mix += torch.from_numpy(bg[:self.num_samples])
-            
-        if self.return_frames:
-            meta_file = self.dataset_path + line["mix"].replace('.wav', '.txt')
-            meta = np.loadtxt(meta_file, delimiter='\t', usecols=(0, 1))
-            active_frame = np.zeros((len(meta), int(self.num_samples / self.sample_rate / 0.1)))
-            for (start, end) in meta:
-                start_idx = int(start / 0.1); end_idx = int(end / 0.1)
-                active_frame[:, start_idx:end_idx] = 1
-            active_frame = active_frame[:self.n_src]
-            return torch.from_numpy(mix), sources, active_frame
-        elif self.return_clap:
-            clap = np.load(self.dataset_path + line["mix"][:-4] + '_sources.npy')
-            # clap = clap[:self.n_src]
-            source_idx = np.random.choice(self.n_src, 1)
-            clap = clap[source_idx]
-            sources = sources[source_idx]
-            return (torch.from_numpy(mix), torch.from_numpy(clap)), sources, 
-        else:
-            return torch.from_numpy(mix), sources
+        return torch.from_numpy(mix), sources
     
 
     def get_infos(self):

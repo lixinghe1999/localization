@@ -14,7 +14,7 @@ from utils.separation_dataset import FUSSDataset
 
 
 
-class FUSS_dataset_simulation(Dataset):
+class FUSS_dataset_wrapper(Dataset):
     def __init__(self, root='../dataset/', split='train', sr=16000):
         if split == 'train':
             data_list = 'FUSS/ssdata/train_example_list.txt'
@@ -30,22 +30,24 @@ class FUSS_dataset_simulation(Dataset):
         source = sources[source_idx]; active_frame = active_frame[source_idx]
         return source, 0, active_frame
     
-class FSD50K_dataset_simulation(Dataset):
+class FSD50K_dataset_wrapper(Dataset):
     def __init__(self, root='../dataset/', split='train', sr=16000):
         if split == 'train':
             self.dataset = FSD50K_dataset(root + 'FSD50K', split='dev')
         else:
             self.dataset = FSD50K_dataset(root + 'FSD50K', split='eval')
         self.dataset = Singleclass_dataset(self.dataset)
+        self.sr = sr
     def __len__(self):
         return len(self.dataset)
     def __getitem__(self, idx):
-        _, sources, active_frame = self.dataset.__getitem__(idx)
-        source_idx = np.random.choice(len(sources))
-        source = sources[source_idx]; active_frame = active_frame[source_idx]
-        return source, 0, active_frame
+        output_dict = self.dataset.__getitem__(idx)
+        audio = output_dict['audio']
+        label = output_dict['cls_label']; label = np.argmax(label)
+        active_frame = np.ones(int(len(audio) / self.sr / 0.1))
+        return audio, label, active_frame
 
-class AudioSet_dataset_simulation(Dataset):
+class AudioSet_dataset_wrapper(Dataset):
     def __init__(self, root='../dataset/audioset', split='train', sr=16000):
         self.dataset = AudioSet_dataset(root, split=split, modality='audio', label_level='frame')
     def __len__(self):
@@ -154,11 +156,14 @@ def dataset_parser(dataset, relative_path):
         train_dataset = NIGENS_dataset(root=root, split='train')
         test_dataset = NIGENS_dataset(root=root, split='test')
     elif dataset == 'AudioSet':
-        train_dataset = AudioSet_dataset_simulation(split='train')
-        test_dataset = AudioSet_dataset_simulation(split='eval')
+        train_dataset = AudioSet_dataset_wrapper(split='train')
+        test_dataset = AudioSet_dataset_wrapper(split='eval')
     elif dataset == 'FUSS':
-        train_dataset = FUSS_dataset_simulation(split='train')
-        test_dataset = FUSS_dataset_simulation(split='eval')
+        train_dataset = FUSS_dataset_wrapper(split='train')
+        test_dataset = FUSS_dataset_wrapper(split='eval')
+    elif dataset == 'FSD50K':
+        train_dataset = FSD50K_dataset_wrapper(split='train')
+        test_dataset = FSD50K_dataset_wrapper(split='test')
     return train_dataset, test_dataset
 
 if __name__ == '__main__':

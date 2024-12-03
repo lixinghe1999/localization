@@ -123,6 +123,17 @@ def region_beamforming(mixture_audio, source_audio, label, config):
     # print(mixture_audio.shape, 'region_audio shape:', region_audio.shape, 'region_active:', region_active)
     return mixture_audio, region_audio
 
+def label_beamforming(mixture_audio, source_audio, label, config):
+    num_sources = len(source_audio)
+    source_idx = np.random.choice(range(num_sources))
+    for l in label:
+        if l[2] == source_idx:
+            cls_label = l[1]
+            break    
+    cls_one_hot = np.zeros(config['num_class']); cls_one_hot[cls_label] = 1
+    mixture_audio = mixture_audio[0]
+    source_audio = source_audio[source_idx, 0]
+    return mixture_audio, source_audio, cls_one_hot
 class Beamforming_dataset(Dataset):
     def __init__(self, root_dir, config=None):
         self.config = config
@@ -187,7 +198,9 @@ class Beamforming_dataset(Dataset):
             # only test with two channels
             mixture_audio = mixture_audio[:] 
             source_audio = source_audio[:, :]  
-        if self.output_format == 'separation':
+        elif self.output_format == 'semantic':
+            mixture_audio, source_audio, cls_label = label_beamforming(mixture_audio, source_audio, label, self.config)
+        elif self.output_format == 'separation':
             # fix to the first channel
             mixture_audio = mixture_audio[0] # [left, T]
             source_audio = source_audio[:, 0] # [source, left, T]            
