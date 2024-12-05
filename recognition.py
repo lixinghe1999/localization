@@ -81,8 +81,7 @@ class AudioRecognition(pl.LightningModule):
         return torch.utils.data.DataLoader(self.test_dataset, batch_size=4, shuffle=False, num_workers=4)  
 
 if __name__ == "__main__":
-    trainer = pl.Trainer(max_epochs=50, devices=[0])
-
+    trainer = pl.Trainer(max_epochs=10, devices=[0])
     model = AudioRecognition()
     trainer.fit(model)
     

@@ -55,9 +55,9 @@ if __name__ == '__main__':
                 "max_sources": 2,
             }
     train_dataset = FUSSDataset(config['train_datafolder'], n_src=config['max_sources'], 
-                                duration=config['duration'], sample_rate=8000, return_clap=True)
+                                duration=config['duration'], sample_rate=8000)
     test_dataset = FUSSDataset(config['train_datafolder'], n_src=config['max_sources'], 
-                               duration=config['duration'], sample_rate=8000, return_clap=True)
+                               duration=config['duration'], sample_rate=8000)
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=4)
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False, num_workers=4)
@@ -65,10 +65,10 @@ if __name__ == '__main__':
     model = SeparationLightningModule(config)
     trainer = Trainer(max_epochs=config['epochs'], devices=[0])
     # trainer.fit(model, train_loader, test_loader)  
-    trainer.validate(model, test_loader)
-
-    # ckpt = 'lightning_logs/fuss_sudormrfnet8/checkpoints/epoch=49-step=62450.ckpt'
-    # ckpt = torch.load(ckpt, weights_only=True)['state_dict']
-    # model.load_state_dict(ckpt, strict=True)
     # trainer.validate(model, test_loader)
+
+    ckpt = 'lightning_logs/separation/fuss_sudormrfnet8/checkpoints/epoch=49-step=62450.ckpt'
+    ckpt = torch.load(ckpt, weights_only=True)['state_dict']
+    model.load_state_dict(ckpt, strict=True)
+    trainer.validate(model, test_loader)
 

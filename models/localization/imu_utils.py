@@ -1,8 +1,7 @@
 import numpy as np
-import os
+import datetime
+import librosa
 import matplotlib.pyplot as plt
-
-
 
 def quaternion_to_euler_batch(quaternions):
     """
@@ -33,24 +32,23 @@ def quaternion_to_euler_batch(quaternions):
     euler = np.column_stack((yaw, pitch, roll))
     euler = np.degrees(euler)
     return euler
-def pyIMU(data, plot=False):
+def pyIMU(data, frequency=50):
     from pyIMU.madgwick import Madgwick
     from pyIMU.quaternion import Quaternion, Vector3D 
     from pyIMU.motion import Motion
 
-    madgwick = Madgwick(frequency=50.0, gain=0.033)
-
+    madgwick = Madgwick(frequency=frequency, gain=0.033)
     estimator = Motion(declination=9.27, latitude=32.253460, altitude=730, magfield=47392.3)
     timestamp = 0
     quaternions = []; positions = []
     for i in range(len(data)):
         gyro_data = data[i, 3:6]
         acc_data = data[i, 0:3]
-        timestamp += 0.02
+        timestamp += 1/frequency
         gyro_data = Vector3D(gyro_data)
         acc_data = Vector3D(acc_data)
         # provide time increment dt based on time expired between each sensor reading
-        madgwick.update(gyr=gyro_data, acc=acc_data, dt=0.02)
+        madgwick.update(gyr=gyro_data, acc=acc_data, dt=1/frequency)
         # access the quaternion
         quaternions.append(madgwick.q.q)
 
@@ -61,22 +59,41 @@ def pyIMU(data, plot=False):
     positions = np.array(positions)
     # convert quaternion to euler angles
     eulers = quaternion_to_euler_batch(quaternions)
-    if plot:
-        fig, axs = plt.subplots(2, 1, figsize=(10, 10))
-        axs[0].plot(positions)
-        axs[1].plot(eulers, label=['yaw', 'pitch', 'roll'])
-        axs[1].legend()
-        plt.savefig('pyIMU.png')
-    return eulers
+    return eulers, positions
 
-
+def imu_loading(imu_file, sample_rate=50):
+    '''
+    Output
+    accelerometer: [T, 3], M/s^2
+    gyroscope: [T, 3], rad/s
+    '''
+    if imu_file.endswith('.npy'):
+        imu_data = np.load(imu_file)
+        gyroscope = imu_data[:, 0:3] 
+        accelerometer = imu_data[:, 3:6]
+    else:
+        imu_data = np.loadtxt(imu_file, delimiter=',', skiprows=1, usecols=(0, 1, 2, 3, 4, 5, 6,))
+        imu_timestamp = np.loadtxt(imu_file, delimiter=',', skiprows=1, usecols=(7,), dtype=str)
+        imu_timestamp = [datetime.datetime.strptime(time, '%Y%m%d_%H%M%S_%f') for time in imu_timestamp]
+        # set the start time to 0 and convert to seconds
+        imu_timestamp = np.array([(time - imu_timestamp[0]).total_seconds() for time in imu_timestamp])
+        imu_sr = len(imu_timestamp)/imu_timestamp[-1]
+        imu_data = librosa.resample(imu_data[:, :6].T, orig_sr=imu_sr, target_sr=sample_rate).T
+        # accelerometer = imu_data[:, 0:3] / 9.81
+        # gyroscope = imu_data[:, 3:6] / np.pi * 180
+        accelerometer = imu_data[:, 0:3] 
+        gyroscope = imu_data[:, 3:6] 
+    imu = np.hstack((accelerometer, gyroscope))
+    return imu
 if __name__ == '__main__':
-    data_dir = 'dataset/earphone/test'
-    data_files = os.listdir(data_dir)
-    data_files.sort()
+    imu_file = 'test_example.csv'
+    imu = imu_loading(imu_file, sample_rate=50)
+    eulers, positions = pyIMU(imu, frequency=50)
 
-    for data_file in data_files[4:]:
-        data = np.loadtxt(os.path.join(data_dir, data_file), delimiter=',', skiprows=1, usecols=(0, 1, 2, 3, 4, 5))
-        break
-    # kalman_filter(data, dt=0.02, plot=True)
-    pyIMU(data, plot=True)
+    plt.figure()
+    plt.plot(eulers[:, 0], label='yaw')
+    plt.plot(eulers[:, 1], label='pitch')
+    plt.plot(eulers[:, 2], label='roll')
+    plt.legend()
+    plt.title('Euler Angles')
+    plt.savefig('euler_angles.png')

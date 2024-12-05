@@ -16,7 +16,7 @@ from asteroid.losses import pairwise_neg_sisdr, PITLossWrapper, singlesrc_neg_si
 # Asteroid's System is a convenience wrapper for PyTorch-Lightning.
 from asteroid.engine import System
 from utils.beamforming_dataset import Beamforming_dataset
-from utils.separation_dataset import FUSSDataset
+from utils.separation_dataset import FUSSDataset, LabelDataset
 import torch
 import pytorch_lightning as pl
 
@@ -25,8 +25,8 @@ class SeparationLightningModule(pl.LightningModule):
         super(SeparationLightningModule, self).__init__()
         self.config = config
         if self.config['output_format'] == 'semantic':
-            self.model = SemanticHearingNet(label_len=512)
-            self.loss = PITLossWrapper(pairwise_neg_sisdr, pit_from="pw_mtx")
+            self.model = SemanticHearingNet(label_len=config['num_class'])
+            self.loss = singlesrc_neg_sisdr
         else:
             self.model = MultiChannel_Sep('SuDORMRFNet', n_channel=1, n_src=2, sample_rate=config['sample_rate'])
             if config['end2end']:
@@ -47,8 +47,8 @@ class SeparationLightningModule(pl.LightningModule):
         data, label = batch
         if self.config['output_format'] == 'semantic':
             outputs = self.model(data)
-            loss = self.loss(outputs, label)
-            self.log('train_loss', loss, on_step=True, prog_bar=True, logger=True)
+            loss = self.loss(outputs.squeeze(), label).mean()
+            self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         else:
             if self.config['end2end']:
                 outputs = self.model(data)
@@ -68,7 +68,7 @@ class SeparationLightningModule(pl.LightningModule):
         data, label = batch
         if self.config['output_format'] == 'semantic':
             outputs = self.model(data)
-            loss = self.loss(outputs, label)
+            loss = self.loss(outputs.squeeze(), label).mean()
         else:
             if self.config['end2end']:
                 outputs = self.model(data)
@@ -81,7 +81,6 @@ class SeparationLightningModule(pl.LightningModule):
                 B, S, C, T = outputs.shape
                 outputs = outputs.reshape(B, S * C, T); label = label.reshape(B, S * C, T)
                 loss = self.loss(outputs, label).mean()
-        print(loss.item())
         self.log('validation_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)      
 
     def configure_optimizers(self):
@@ -91,19 +90,18 @@ class SeparationLightningModule(pl.LightningModule):
 if __name__ == '__main__':
 
     config = { 
-                "train_datafolder": "dataset/smartglass/FSD50K_2/train",
-                "test_datafolder": "dataset/smartglass/FSD50K_2/test",
+                "train_datafolder": "dataset/separation/ESC50/dev",
+                "test_datafolder": "dataset/separation/ESC50/eval",
                 "duration": 10,
-                "epochs": 20,
+                "epochs": 50,
                 "batch_size": 4,
                 "output_format": "semantic",
                 "sample_rate": 16000,
                 "max_sources": 2,
-                "num_region": 8,
-                "end2end": True
+                "num_class": 50,
             }
-    train_dataset = Beamforming_dataset(config['train_datafolder'], config,)
-    test_dataset = Beamforming_dataset(config['test_datafolder'], config,)
+    train_dataset = LabelDataset(config['train_datafolder'], config,)
+    test_dataset = LabelDataset(config['test_datafolder'], config,)
 
   
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=4)

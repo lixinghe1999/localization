@@ -1,22 +1,18 @@
 simulate/HRTF-Database
-simulate/TIMIT
-simulate/NIGENS
 
 device/dataset
 
-dataset/FSD50K
-dataset/6DoFSELDDataset
-dataset/audioset
+dataset/audio
+dataset/adhoc
+dataset/data
+dataset/SELD
 dataset/earphone
-dataset/FUSS
 dataset/smartglass
-dataset/starss23
-dataset/NIGENS
-dataset/TIMIT
-dataset/VCTK
+
 
 lightning_logs/
 cache/
+*.pdf
 *.ckpt
 *.json
 *.png

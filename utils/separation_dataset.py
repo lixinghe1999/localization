@@ -5,6 +5,7 @@ import pandas as pd
 import soundfile as sf
 import librosa
 import os
+import json
 
 class FUSSDataset(Dataset):
     """Dataset class for FUSS [1] tasks.
@@ -28,8 +29,6 @@ class FUSSDataset(Dataset):
         dataset_path = os.path.dirname(file_list_path) + '/'
         self.dataset_path = dataset_path
         self.return_bg = return_bg
-        self.return_frames = return_frames
-        self.return_clap = return_clap
         # Constants
         self.max_n_fg = 3
         self.n_src = n_src  # Same variable as in WHAM
@@ -89,6 +88,27 @@ class FUSSDataset(Dataset):
         return infos
 
 
+class LabelDataset(Dataset):
+    def __init__(self, root_dir, config):
+        self.root_dir = root_dir
+        self.config = config
+        self.audio_files = os.listdir(root_dir)
+
+    def __len__(self):
+        return len(self.audio_files)
+    def __getitem__(self, idx):
+        audio_folder = os.path.join(self.root_dir, self.audio_files[idx])
+        audio_file = os.path.join(audio_folder, 'audio.wav')
+        noise_file = os.path.join(audio_folder, 'noise.wav')
+        meta_file = os.path.join(audio_folder, 'meta.json')
+        meta = json.load(open(meta_file)); label = meta['label']
+        label_vector = np.zeros(self.config['num_class'], dtype=np.float32); label_vector[label] = 1
+
+        audio, _ = librosa.load(audio_file, sr=None)
+        noise, _ = librosa.load(noise_file, sr=None)
+        mix = audio + noise
+        return (mix, label_vector), audio, 
+
 fuss_license = dict(
     title="Free Universal Sound Separation Dataset",
     title_link="https://zenodo.org/record/3743844#.X0Jtehl8Jkg",
@@ -100,27 +120,11 @@ fuss_license = dict(
 )
 
 if __name__ == '__main__':
-    import torchmetrics
+    dataset = FSD50KLabelDataset('dataset/FSD50K_Sep/dev')
+
+    mix, audio, label = dataset[0]
     import matplotlib.pyplot as plt
-    metric = torchmetrics.ScaleInvariantSignalNoiseRatio()
-    dataset = FUSSDataset('dataset/FUSS/ssdata/', 'dataset/FUSS/ssdata/eval_example_list.txt', n_src=2, duration=10, sample_rate=8000)
-    print(len(dataset))
-    for data in dataset:
-        # print(data[0].shape, data[1].shape)
-        mix, sources = data
-        print(mix.shape, sources.shape)
-        sisnr_1 = metric(sources[0], mix)
-        sisnr_2 = metric(sources[1], mix)
-        print(sisnr_1, sisnr_2)
-
-        fig, axs = plt.subplots(3, 1)
-        axs[0].plot(mix)
-        axs[0].set_title('mix')
-        axs[1].plot(sources[0])
-        axs[1].set_title('source 1')
-        axs[2].plot(sources[1])
-        axs[2].set_title('source 2')
-
-        plt.savefig('test.png')
-
-        break
+    fig, axs = plt.subplots(2, 1)
+    axs[0].plot(mix)
+    axs[1].plot(audio)
+    plt.savefig('test.png')

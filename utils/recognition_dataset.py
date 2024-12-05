@@ -9,9 +9,48 @@ import librosa
 from PIL import Image
 import json
 
+class Ontology():
+    def __init__(self, root):
+        ontolog = os.path.join(root, 'ontology.json')
+        ontolog = json.load(open(ontolog))
+        self.ontology = {v['id']: v for v in ontolog}
+        self.mid_to_name = {mid: self.ontology[mid]['name'] for mid in self.ontology}
+        self.leaf_to_parent = {mid: [] for mid in self.ontology}
+        for mid in self.ontology:
+            for child_id in self.ontology[mid]['child_ids']:
+                self.leaf_to_parent[child_id].append(mid)
+        for mid in self.leaf_to_parent:
+            if len(self.leaf_to_parent[mid]) == 0:
+                self.leaf_to_parent[mid].append(mid)
+
+    def convert_classes(self, vocabulary, num_inherit=1):
+        '''
+        vocabulary: {mid: idx}
+        according to the self.leaf_to_parent, perform num_inherit times of inheritance
+        output:
+        {'parent1': [mid1, mid2, mid3], 'parent2': [mid4, mid5, mid6]}
+        '''
+        self.classes_mapping = {}
+        mids = list(vocabulary.keys())
+        for mid in mids:
+            parent_ids = [mid]
+            for i in range(num_inherit):
+                new_parent_ids = []
+                for parent_id in parent_ids:
+                    new_parent_ids += self.leaf_to_parent[parent_id]
+                parent_ids = new_parent_ids
+            for parent_id in parent_ids:
+                if parent_id not in self.classes_mapping:
+                    self.classes_mapping[parent_id] = []
+                self.classes_mapping[parent_id].append(mid)
+
+        new_vocabulary = {}
+        for i, parent_mid in enumerate(self.classes_mapping):
+            for mid in self.classes_mapping[parent_mid]:
+                new_vocabulary[mid] = i
+        return new_vocabulary
 
 class AudioSet_dataset(Dataset):
-
     def __init__(self, root='audioset', modality=[], split='eval', sr=16000, duration=10, frame_duration=0.1, label_level='clip'):
         self.image_dir = os.path.join(root, 'audioset_{}_strong_images'.format(split))
         self.audio_dir = os.path.join(root, 'audioset_{}_strong_audios'.format(split))
@@ -35,12 +74,6 @@ class AudioSet_dataset(Dataset):
             labels[segment_id].append([start_seconds, end_seconds, label])
         self.num_classes = len(self.label_map)
         print('Number of classes:', self.num_classes)
-
-        ontolog = os.path.join(root, 'ontology.json')
-        ontolog = json.load(open(ontolog))
-        self.ontology = {v['id']: v for v in ontolog}
-        self.mid_to_name = {mid: self.ontology[mid]['name'] for mid in self.ontology}
-
 
         self.sr = sr
         self.duration = duration
@@ -129,12 +162,15 @@ class FSD50K_dataset(Dataset):
         self.root_dir = os.path.join(root_dir, f'FSD50K.{split}_audio')
         self.sr = sr
         self.duration = duration
+        self.label_level = label_level
         self.label = os.path.join(root_dir, f'FSD50K.ground_truth/{split}.csv')
         vocabulary = os.path.join(root_dir, 'FSD50K.ground_truth/vocabulary.csv')
         self.vocabulary = pd.read_csv(vocabulary, names=['name', 'mid'], delimiter=',')
         # convert to dictionary, key = mid, value = index
         self.vocabulary = {mid: idx for idx, mid in enumerate(self.vocabulary['mid'])}
-        self.num_classes = len(self.vocabulary)
+        self.ontolog = Ontology(root_dir)
+        self.vocabulary = self.ontolog.convert_classes(self.vocabulary, num_inherit=1)
+        self.num_classes = max(self.vocabulary.values()) + 1 # incase multiple mid may have the same index
 
         self.clip_labels = []
         self.label = pd.read_csv(self.label, delimiter=',',)
@@ -164,15 +200,76 @@ class FSD50K_dataset(Dataset):
         output_dict['cls_label'] = label
         return output_dict
 
-def Singleclass_dataset(dataset):
-    keep_idx = []
-    for i, data in enumerate(dataset.clip_labels):
-        _, label = data
-        total_num_classes = np.sum(label, axis=-1)
-        if total_num_classes == 1:
+class ESC50_dataset(Dataset):
+    def __init__(self, root_dir, split='eval', label_level='clip', sr=16000, duration=5):
+        """
+        Args:
+            root_dir (string): Directory with all the audio files.
+            transform (callable, optional): Optional transform to be applied on a sample.
+        """
+        self.root_dir = os.path.join(root_dir, f'audio')
+        self.sr = sr
+        self.duration = duration
+        self.label_level = label_level
+        self.label = os.path.join(root_dir, f'meta/esc50.csv')
+        self.num_classes = 50
+
+        self.clip_labels = []
+        self.label = pd.read_csv(self.label, delimiter=',',)
+        for i in range(len(self.label)):
+            audio_file = os.path.join(self.root_dir, self.label.iloc[i, 0])
+            label = self.label.iloc[i, 2]; fold = self.label.iloc[i, 1]
+            if split == 'eval' and fold != 5:
+                continue
+            if split == 'dev' and fold == 5:
+                continue
+             
+            cls_label = np.zeros(self.num_classes, dtype=np.float32)
+            cls_label[label] = 1
+            self.clip_labels.append([audio_file, cls_label])
+    def __len__(self):
+        return len(self.clip_labels)
+    def __getitem__(self, idx):
+        output_dict = {}
+        audio_path, label = self.clip_labels[idx]
+        # convert [cls1, cls2] to one-hot encoding by the number of classes
+        audio, _ = librosa.load(audio_path, sr=self.sr)
+        if len(audio) < self.duration * self.sr:
+            audio = np.pad(audio, (0, self.duration*self.sr - len(audio)))
+        else:
+            audio = audio[:self.duration*self.sr]
+
+        output_dict['audio'] = audio
+        output_dict['cls_label'] = label
+        return output_dict
+
+
+def Singleclass_dataset(dataset, max_num_each_class=500):
+    keep_idx = []; classes_index = {}
+    count = 0
+    for i in range(len(dataset)):
+        _, label = dataset.clip_labels[i]
+        class_index = np.where(label == 1)[0]
+        if len(class_index) == 1: # no multi-label
+            class_index = class_index[0]
             keep_idx.append(i)
+            if class_index not in classes_index:
+                classes_index[class_index] = []
+            classes_index[class_index].append(count)
+            count += 1
+
+    new_keep_idx = []
+    for class_index in classes_index:
+        if len(classes_index[class_index]) > max_num_each_class:
+            classes_index[class_index] = classes_index[class_index][:max_num_each_class]
+        else: # resample
+            classes_index[class_index] = classes_index[class_index] * (max_num_each_class // len(classes_index[class_index])) + classes_index[class_index][:max_num_each_class % len(classes_index[class_index])]
+        new_keep_idx += [keep_idx[idx] for idx in classes_index[class_index]]
+    keep_idx = new_keep_idx
+
+    print('Number of samples before filtering:', len(dataset),  'after filtering:', len(keep_idx))
     dataset = Subset(dataset, keep_idx)
-    return dataset
+    return dataset, classes_index
 
 
 
@@ -191,57 +288,14 @@ def find_similar_classes(classes_name):
     labels = kmeans.labels_
     return labels
 
-def split_audioset_into_classwise():
-    import shutil
-
-    dataset = AudioSet_dataset('../dataset/audioset', split='eval', modality=['audio'], label_level='clip')
-
-    classes_name = dataset.class_map
-    # classes_label = find_similar_classes(classes_name)
-    # cluster_info = {}
-    # for cluster in range(20):
-    #     classes_cluster = np.where(classes_label == cluster)[0]
-    #     print([classes_name[class_idx] for class_idx in classes_cluster])
-    #     data_segments = []
-    #     for segment_id, label in dataset.clip_labels:
-    #         if np.sum(label[classes_cluster]) > 0:
-    #             data_segments.append(segment_id,)
-    #     print('Number of segments for cluster', cluster, len(data_segments), classes_cluster)
-    # dataset_folder = '../dataset/audioset/audioset_classwise/' + str(cluster)
-    
-    cluster_info = {} # one class one cluster
-    for class_idx in range(len(classes_name)):
-        class_name = classes_name[class_idx]
-        data_segments = []
-        for segment_id, label in dataset.clip_labels:
-            if np.sum(label[class_idx]) > 0:
-                data_segments.append(segment_id,)
-        print('Number of segments for cluster', class_idx, class_name, len(data_segments))
-        dataset_folder = '../dataset/audioset/audioset_classwise/' + class_name
-        os.makedirs(dataset_folder, exist_ok=True) 
-        for segment_id in data_segments: 
-            audio_file = os.path.join(dataset.audio_dir, segment_id + '.flac')
-            output_file = os.path.join(dataset_folder, segment_id + '.flac')
-            # copy the audio file
-            shutil.copy(audio_file, output_file)
-    #     cluster_info[class_idx] = class_name
-    # with open('../dataset/audioset/audioset_classwise/cluster_info.json', 'w') as f:
-    #     json.dump(cluster_info, f, indent=4)
-
             
 
 
 
 
 if __name__ == '__main__':
-    # dataset = AudioSet_dataset('dataset/audioset', split='eval', modality=['audio'], label_level='clip')
-    # print(len(dataset))
-    # dataset_sample(dataset)
-    # dataset = AudioSet_Singleclass_dataset('dataset/audioset', split='eval', modality=['audio'], label_level='frame')
+    # dataset = FSD50K_dataset('../dataset/FSD50K/', split='eval')
+    # dataset = Singleclass_dataset(dataset)
 
-    # for i in range(100):
-    #     data = dataset.__getitem__(i)
-    #     frame_num_class = np.sum(data['cls_label'], axis=1)
-    #     print(np.mean(frame_num_class == 1), np.mean(frame_num_class > 1), np.mean(frame_num_class == 0))
-
-    split_audioset_into_classwise()
+    dataset = ESC50_dataset('../dataset/ESC-50-master/', split='eval'); dataset = Singleclass_dataset(dataset)
+    dataset = ESC50_dataset('../dataset/ESC-50-master/', split='dev'); dataset = Singleclass_dataset(dataset)
