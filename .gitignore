@@ -4,7 +4,7 @@ device/dataset
 
 dataset/audio
 dataset/adhoc
-dataset/data
+dataset/BinauralCuratedDataset
 dataset/SELD
 dataset/earphone
 dataset/smartglass

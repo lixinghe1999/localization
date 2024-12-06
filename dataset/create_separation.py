@@ -18,26 +18,27 @@ for split in ['dev', 'eval']:
     
     dataset_dir = './separation/ESC50/' + split
     os.makedirs(dataset_dir, exist_ok=True)
-    dataset = ESC50_dataset('./ESC-50-master', split=split)
+    dataset = ESC50_dataset('./audio/ESC-50-master', split=split)
     singleclass_dataset, classes_index = Singleclass_dataset(dataset)
+    num_repeat = 25
     for i in tqdm(range(len(singleclass_dataset))):
         output_dict = singleclass_dataset.__getitem__(i)
         audio = output_dict['audio']
         label = output_dict['cls_label']
         label = np.where(label == 1)[0][0]
 
-        save_folder = os.path.join(dataset_dir, str(i))
-        os.makedirs(save_folder, exist_ok=True)
-        # save: 1) audio, 2) noise, 3) label
-        sf.write(os.path.join(save_folder, 'audio.wav'), audio, 16000)
+        for j in range(num_repeat):
+            save_folder = os.path.join(dataset_dir, str(i) + '_' + str(j))
+            os.makedirs(save_folder, exist_ok=True)
+            # save: 1) audio, 2) noise, 3) label
+            sf.write(os.path.join(save_folder, 'audio.wav'), audio, 16000)
+            remained_index = list(set(range(len(dataset))) - set(classes_index[label]))
+            random_noise_index = np.random.choice(remained_index)
 
-        remained_index = list(set(range(len(dataset))) - set(classes_index[label]))
-        random_noise_index = np.random.choice(remained_index)
+            output_dict = dataset.__getitem__(random_noise_index)
+            noise = output_dict['audio']; noise_label = output_dict['cls_label']; noise_label = np.where(noise_label == 1)[0]
+            sf.write(os.path.join(save_folder, 'noise.wav'), noise, 16000)
 
-        output_dict = dataset.__getitem__(random_noise_index)
-        noise = output_dict['audio']; noise_label = output_dict['cls_label']; noise_label = np.where(noise_label == 1)[0]
-        sf.write(os.path.join(save_folder, 'noise.wav'), noise, 16000)
-
-        meta_json = {'label': label.tolist(), 'noise_label': noise_label.tolist()}
-        with open(os.path.join(save_folder, 'meta.json'), 'w') as f:
-            json.dump(meta_json, f)
+            meta_json = {'label': label.tolist(), 'noise_label': noise_label.tolist()}
+            with open(os.path.join(save_folder, 'meta.json'), 'w') as f:
+                json.dump(meta_json, f)

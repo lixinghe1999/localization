@@ -107,7 +107,7 @@ class LabelDataset(Dataset):
         audio, _ = librosa.load(audio_file, sr=None)
         noise, _ = librosa.load(noise_file, sr=None)
         mix = audio + noise
-        return (mix, label_vector), audio, 
+        return (mix[None, :], label_vector), audio, 
 
 fuss_license = dict(
     title="Free Universal Sound Separation Dataset",

@@ -244,7 +244,7 @@ class ESC50_dataset(Dataset):
         return output_dict
 
 
-def Singleclass_dataset(dataset, max_num_each_class=500):
+def Singleclass_dataset(dataset, keep_classes=None):
     keep_idx = []; classes_index = {}
     count = 0
     for i in range(len(dataset)):
@@ -258,15 +258,20 @@ def Singleclass_dataset(dataset, max_num_each_class=500):
             classes_index[class_index].append(count)
             count += 1
 
-    new_keep_idx = []
-    for class_index in classes_index:
-        if len(classes_index[class_index]) > max_num_each_class:
-            classes_index[class_index] = classes_index[class_index][:max_num_each_class]
-        else: # resample
-            classes_index[class_index] = classes_index[class_index] * (max_num_each_class // len(classes_index[class_index])) + classes_index[class_index][:max_num_each_class % len(classes_index[class_index])]
-        new_keep_idx += [keep_idx[idx] for idx in classes_index[class_index]]
-    keep_idx = new_keep_idx
-
+    # new_keep_idx = []
+    # for class_index in classes_index:
+    #     if len(classes_index[class_index]) > max_num_each_class:
+    #         classes_index[class_index] = classes_index[class_index][:max_num_each_class]
+    #     else: # resample
+    #         classes_index[class_index] = classes_index[class_index] * (max_num_each_class // len(classes_index[class_index])) + classes_index[class_index][:max_num_each_class % len(classes_index[class_index])]
+    #     new_keep_idx += [keep_idx[idx] for idx in classes_index[class_index]]
+    # keep_idx = new_keep_idx
+    if keep_classes is not None:
+        keep_classes = list(classes_index.keys())[:keep_classes]
+        keep_idx = []
+        for keep_class in keep_classes:
+            keep_idx += classes_index[keep_class]
+    
     print('Number of samples before filtering:', len(dataset),  'after filtering:', len(keep_idx))
     dataset = Subset(dataset, keep_idx)
     return dataset, classes_index

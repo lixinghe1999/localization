@@ -33,15 +33,15 @@ class FUSS_dataset_wrapper(Dataset):
 class FSD50K_dataset_wrapper(Dataset):
     def __init__(self, root='../dataset/', split='train', sr=16000):
         if split == 'train':
-            self.dataset = FSD50K_dataset(root + 'FSD50K', split='dev')
+            self.dataset = FSD50K_dataset(root, split='dev')
         else:
-            self.dataset = FSD50K_dataset(root + 'FSD50K', split='eval')
-        self.dataset = Singleclass_dataset(self.dataset)
+            self.dataset = FSD50K_dataset(root, split='eval')
+        self.dataset, _ = Singleclass_dataset(self.dataset)
         self.sr = sr
     def __len__(self):
         return len(self.dataset)
     def __getitem__(self, idx):
-        output_dict = self.dataset.__getitem__(idx)
+        output_dict = self.dataset[idx]
         audio = output_dict['audio']
         label = output_dict['cls_label']; label = np.argmax(label)
         active_frame = np.ones(int(len(audio) / self.sr / 0.1))
@@ -156,14 +156,17 @@ def dataset_parser(dataset, relative_path):
         train_dataset = NIGENS_dataset(root=root, split='train')
         test_dataset = NIGENS_dataset(root=root, split='test')
     elif dataset == 'AudioSet':
-        train_dataset = AudioSet_dataset_wrapper(split='train')
-        test_dataset = AudioSet_dataset_wrapper(split='eval')
+        root = os.path.join(relative_path, 'audioset')
+        train_dataset = AudioSet_dataset_wrapper(root=root, split='train')
+        test_dataset = AudioSet_dataset_wrapper(root=root, split='eval')
     elif dataset == 'FUSS':
-        train_dataset = FUSS_dataset_wrapper(split='train')
-        test_dataset = FUSS_dataset_wrapper(split='eval')
+        root = os.path.join(relative_path, 'FUSS')
+        train_dataset = FUSS_dataset_wrapper(root=root, split='train')
+        test_dataset = FUSS_dataset_wrapper(root=root, split='eval')
     elif dataset == 'FSD50K':
-        train_dataset = FSD50K_dataset_wrapper(split='train')
-        test_dataset = FSD50K_dataset_wrapper(split='test')
+        root = os.path.join(relative_path, 'FSD50K')
+        train_dataset = FSD50K_dataset_wrapper(root=root, split='train')
+        test_dataset = FSD50K_dataset_wrapper(root=root, split='test')
     return train_dataset, test_dataset
 
 if __name__ == '__main__':

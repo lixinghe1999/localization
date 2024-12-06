@@ -460,7 +460,6 @@ class Net(nn.Module):
             x, label = inputs['mixture'], inputs['label_vector']
         else:
             x, label = inputs
-            x = x.unsqueeze(1); label = label.squeeze(1)
         if init_enc_buf is None or init_dec_buf is None or init_out_buf is None:
             assert init_enc_buf is None and \
                    init_dec_buf is None and \

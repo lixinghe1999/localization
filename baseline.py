@@ -22,7 +22,7 @@ for (audio_file, imu_file) in zip(audio_files, imu_files):
     mic_array = np.c_[[0.1, 0, 0], [-0.1, 0, 0.0]]
 
     predictions = doa_inference(audio, mic_array, fs, 2048, 'music', mode='window')
-    t_predictions = np.arange(len(predictions)) * 512 / fs
+    t_predictions = np.arange(len(predictions)) * 2048 / fs
 
     eulers, positions = pyIMU(imu, frequency=50)
     t_eulers = np.arange(len(eulers)) * 1 / 50
