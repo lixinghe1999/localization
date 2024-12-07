@@ -46,7 +46,7 @@ class SeldNetLightningModule(pl.LightningModule):
     def __init__(self, config):
         super(SeldNetLightningModule, self).__init__()
         self.config = config
-        self.model = SeldModel(mic_channels=config['num_channel'], unique_classes=config['output_dimension'], activation='tanh')
+        self.model = SeldModel(mic_channels=config['num_channel'], unique_classes=config['output_channel'], activation='tanh')
         self.criterion = ACCDOA_loss if config['encoding'] == 'ACCDOA' else Multi_ACCDOA_loss
         self.evaluation = ACCDOA_evaluation if config['encoding'] == 'ACCDOA' else Multi_ACCDOA_evaluation
 
@@ -81,48 +81,10 @@ class SeldNetLightningModule(pl.LightningModule):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, default='configs/smartglass.json')
-    args = parser.parse_args()
-    
-    # config = {
-    #     "dataset": "smartglass",
-    #     "train_datafolder": "/home/lixing/localization/dataset/starss23/dev-train-sony",
-    #     "test_datafolder": "/home/lixing/localization/dataset/starss23/dev-test-sony",
-    #     "cache_folder": "cache/starss23/",
-    #     "encoding": "Multi_ACCDOA",
-    #     "duration": 5,
-    #     "frame_duration": 0.1,
-    #     "batch_size": 64,
-    #     "epochs": 50,
-    #     "model": "seldnet",
-    #     "label_type": "framewise",
-    #     "raw_audio": False,
-    #     'num_channel': 10,
-    #     'output_dimension': 6, # no need to do classification now
-    #     "pretrained": False,
-    #     "test": False,
-    #     "class_names": [
-    #             "Female speech, woman speaking",
-    #             "Male speech, man speaking",
-    #             "Clapping",
-    #             "Telephone",
-    #             "Laughter",
-    #             "Domestic sounds",
-    #             "Walk, footsteps",
-    #             "Door, open or close",
-    #             "Music",
-    #             "Musical instrument",
-    #             "Water tap, faucet",
-    #             "Bell",
-    #             "Knock"
-    #         ],
-    #     "motion": False,
-    # }
 
     config = {
-        "train_datafolder": "/home/lixing/localization/dataset/earphone/AudioSet_2/train",
-        "test_datafolder": "/home/lixing/localization/dataset/earphone/AudioSet_2/test",
+        "train_datafolder": "/home/lixing/localization/dataset/smartglass/NIGENS_2/train",
+        "test_datafolder": "/home/lixing/localization/dataset/smartglass/NIGENS_2/test",
         "encoding": "ACCDOA",
         "duration": 5,
         "frame_duration": 0.1,
@@ -131,12 +93,14 @@ if __name__ == '__main__':
         "model": "seldnet",
         "label_type": "framewise",
         "raw_audio": False,
-        'num_channel': 3,
-        'output_dimension': 3, # no need to do classification now
+        'num_channel': 15,
+        'output_channel': 3, # no need to do classification now
         "pretrained": False,
         "test": False,
         'class_names':["sound"],
-        'motion': False
+        'motion': False,
+        "sr": 16000,
+        'mixture': False,
     }
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -154,8 +118,7 @@ if __name__ == '__main__':
         model.load_state_dict(ckpt)
         print('load pretrained model from', config['pretrained'])
 
-    trainer = Trainer(
-        max_epochs=config['epochs'], devices=1)
+    trainer = Trainer(max_epochs=config['epochs'], devices=1)
 
     if config['test']:
         trainer.validate(model, test_loader)

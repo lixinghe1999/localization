@@ -151,7 +151,7 @@ class SeldModel_Mobile(SeldModel):
         self.imu_audio_proj = nn.Linear(params['nb_cnn2d_filt'], params['nb_cnn2d_filt'])
         self.t_downsample = t_pool_size[0] * t_pool_size[1] * t_pool_size[2]
 
-    def forward(self, x, imu):
+    def forward(self, x, imu=None):
         """
         input: 
         audio - (batch_size, mic_channels, time_steps, mel_bins)
@@ -161,20 +161,19 @@ class SeldModel_Mobile(SeldModel):
         """
         for conv_cnt in range(len(self.conv_block_list)):
             x = self.conv_block_list[conv_cnt](x)
-
-        imu = self.imu_norm(imu.transpose(1, 2).contiguous()).transpose(1, 2).contiguous()
-        imu = self.imu_proj(imu)
-        imu = self.imu_transformer(imu)
-        # max_pooling by 50
-        imu = F.max_pool1d(imu.transpose(1, 2).contiguous(), kernel_size=self.t_downsample).transpose(1, 2).contiguous()
-
         x = x.transpose(1, 2).contiguous()
         x = x.view(x.shape[0], x.shape[1], -1).contiguous()
         (x, _) = self.gru(x)
         x = torch.tanh(x)
         x = x[:, :, x.shape[-1]//2:] * x[:, :, :x.shape[-1]//2]
 
-        x = x + self.imu_audio_proj(imu)
+        if imu is not None:
+            imu = self.imu_norm(imu.transpose(1, 2).contiguous()).transpose(1, 2).contiguous()
+            imu = self.imu_proj(imu)
+            imu = self.imu_transformer(imu)
+            # max_pooling by 50
+            imu = F.max_pool1d(imu.transpose(1, 2).contiguous(), kernel_size=self.t_downsample).transpose(1, 2).contiguous()
+            x = x + self.imu_audio_proj(imu)
 
         pos_embedding = self.pos_embedder(x)
         x = x + pos_embedding

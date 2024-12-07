@@ -27,7 +27,7 @@ class Localization_dataset(Dataset):
     2. simulation by HRTF
     3. simulation by ISM (PRA)
     '''
-    def __init__(self, root_dir, config=None, sr=16000):
+    def __init__(self, root_dir, config=None):
         self.config = config
         self.encoding = self.config['encoding']
         if self.encoding == 'ACCDOA':
@@ -43,7 +43,7 @@ class Localization_dataset(Dataset):
         self.label_folder = os.path.join(self.root_dir, 'meta')
         self.labels = os.listdir(self.label_folder)
         # make sure 
-        self.sr = sr
+        self.sr = self.config['sr']
         self.duration = self.config['duration']
         self.frame_duration = self.config['frame_duration']
         self.class_names = config['class_names']
@@ -51,9 +51,10 @@ class Localization_dataset(Dataset):
         self.raw_audio = self.config['raw_audio']
         self.label_type = self.config['label_type']
         self.motion = self.config['motion']
+        self.mixture = self.config['mixture']
 
         self.crop_dataset()
-        self._cache_()
+        self._cache_(skip_cache=False)
 
     def __len__(self):
         return len(self.crop_labels)
@@ -66,15 +67,18 @@ class Localization_dataset(Dataset):
             label = np.loadtxt(os.path.join(self.label_folder, label_name), delimiter=',', dtype=np.int32, skiprows=1)
         else:
             label, label_name = label_name
-        # print(os.path.join(self.label_folder, label_name))
         if len(label.shape) == 1:
             label = label[np.newaxis, :]
-        audio_file = os.path.join(self.data_folder, label_name[:-4] + '/0.wav')
-        max_frame = int(librosa.get_duration(path=audio_file) * 10)
-        frame_duration = int(self.duration / 0.1)
 
-        for start_frame in range(0, max_frame, frame_duration):
-            end_frame = min(start_frame + frame_duration, max_frame)
+        if self.mixture:
+            audio_file = os.path.join(self.data_folder, label_name[:-4] + '.wav')
+        else:
+            audio_file = os.path.join(self.data_folder, label_name[:-4] + '/0.wav')
+        max_frame = int(librosa.get_duration(path=audio_file) / 0.1)
+        num_frame = int(self.duration / 0.1)
+
+        for start_frame in range(0, max_frame, num_frame):
+            end_frame = min(start_frame + num_frame, max_frame)
             mini_chunk = []
             for l in label:
                 if len(l) == 0:
@@ -127,12 +131,11 @@ class Localization_dataset(Dataset):
                 self.eventwise_meta(label_name)
         print('Total crop labels:', len(self.crop_labels))
     
-    def _cache_(self):
+    def _cache_(self, skip_cache=False):
         print('Caching the dataset')
         cache_folder = os.path.join(self.root_dir, 'cache')
         os.makedirs(cache_folder, exist_ok=True)
-        num_cached = len(os.listdir(cache_folder))
-        if self.__len__() == num_cached:
+        if skip_cache:
             print('Already cached')
         else:
             batch_size = 8
@@ -148,35 +151,37 @@ class Localization_dataset(Dataset):
         label = [frame, class, source/instance, azimuth, elevation, distance]
         '''
         label_name, start_frame, end_frame, label = self.crop_labels[index]
-        frame_cls = np.zeros((self.config['duration'] * 10, len(self.class_names)))
-        for frame, class_idx, _, _, _, _  in label:
-            if len(self.class_names) == 1:
-                class_idx = 0
-            frame_cls[frame, class_idx] = 1
 
         label = self.encoding(label, self.config).astype(np.float32)
 
         start_frame_audio = start_frame / 10
         audio_name = os.path.join(self.data_folder, label_name)
 
-        source_audio = []
-        source_files = os.listdir(audio_name[:-4])
-        for i in range(len(source_files)):
-            source_file = source_files[i]
-            source, sr = librosa.load(os.path.join(audio_name[:-4], source_file), sr=self.sr, mono=False, 
-                                    offset=start_frame_audio, duration=self.duration)
-            if source.shape[-1] < self.duration * self.sr:
-                source = np.pad(source, ((0, 0), (0, self.duration * self.sr - source.shape[-1])))
+        if self.mixture:
+            audio, sr = librosa.load(audio_name[:-4] + '.wav', sr=self.sr, mono=False, offset=start_frame_audio, duration=self.duration)
+            if audio.shape[-1] < self.duration * self.sr:
+                audio = np.pad(audio, ((0, 0), (0, self.duration * self.sr - audio.shape[-1])))
             else:
-                source = source[:, :int(self.duration * self.sr)]
-            source_audio.append(source)
-        source_audio = np.array(source_audio)
-        audio = np.sum(source_audio, axis=0).astype(np.float32)
+                audio = audio[:, :int(self.duration * self.sr)]
+        else:
+            source_audio = []
+            source_files = os.listdir(audio_name[:-4])
+            for i in range(len(source_files)):
+                source_file = source_files[i]
+                source, sr = librosa.load(os.path.join(audio_name[:-4], source_file), sr=self.sr, mono=False, 
+                                        offset=start_frame_audio, duration=self.duration)
+                if source.shape[-1] < self.duration * self.sr:
+                    source = np.pad(source, ((0, 0), (0, self.duration * self.sr - source.shape[-1])))
+                else:
+                    source = source[:, :int(self.duration * self.sr)]
+                source_audio.append(source)
+            source_audio = np.array(source_audio)
+            audio = np.sum(source_audio, axis=0).astype(np.float32)
 
         if hasattr(self, 'cache_folder'):
             spatial_feature = np.load(os.path.join(self.cache_folder, f'{index}.npy'))
         else:
-            spec = spectrogram(audio)
+            spec = spectrogram(audio, sr=self.sr)
             spatial_feature = gcc_mel_spec(spec).astype(np.float32)
 
         if self.motion:
@@ -188,6 +193,6 @@ class Localization_dataset(Dataset):
                 imu = np.pad(imu, ((0, int(self.duration * 50 - imu.shape[0])), (0, 0)))
         else:
             imu = np.zeros((int(self.duration * 50), 6)).astype(np.float32)
-        return {'spatial_feature': spatial_feature, 'audio': audio, 'label': label, 'imu': imu, 'cls_label': frame_cls}
+        return {'spatial_feature': spatial_feature, 'audio': audio, 'label': label, 'imu': imu}
             
         
