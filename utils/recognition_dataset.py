@@ -267,7 +267,10 @@ def Singleclass_dataset(dataset, keep_classes=None):
     #     new_keep_idx += [keep_idx[idx] for idx in classes_index[class_index]]
     # keep_idx = new_keep_idx
     if keep_classes is not None:
-        keep_classes = list(classes_index.keys())[:keep_classes]
+        if isinstance(keep_classes, int):
+            keep_classes = list(classes_index.keys())[:keep_classes]
+        else:
+            pass
         keep_idx = []
         for keep_class in keep_classes:
             keep_idx += classes_index[keep_class]

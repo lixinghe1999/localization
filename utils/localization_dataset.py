@@ -53,6 +53,7 @@ class Localization_dataset(Dataset):
         self.motion = self.config['motion']
 
         self.crop_dataset()
+        self._cache_()
 
     def __len__(self):
         return len(self.crop_labels)
@@ -68,9 +69,8 @@ class Localization_dataset(Dataset):
         # print(os.path.join(self.label_folder, label_name))
         if len(label.shape) == 1:
             label = label[np.newaxis, :]
-        audio_file = os.path.join(self.data_folder, label_name[:-4] + '.wav')
-        max_frame = int(librosa.get_duration(path=audio_file) / 0.1)
-
+        audio_file = os.path.join(self.data_folder, label_name[:-4] + '/0.wav')
+        max_frame = int(librosa.get_duration(path=audio_file) * 10)
         frame_duration = int(self.duration / 0.1)
 
         for start_frame in range(0, max_frame, frame_duration):
@@ -127,10 +127,10 @@ class Localization_dataset(Dataset):
                 self.eventwise_meta(label_name)
         print('Total crop labels:', len(self.crop_labels))
     
-    def _cache_(self, cache_folder):
+    def _cache_(self):
         print('Caching the dataset')
+        cache_folder = os.path.join(self.root_dir, 'cache')
         os.makedirs(cache_folder, exist_ok=True)
-
         num_cached = len(os.listdir(cache_folder))
         if self.__len__() == num_cached:
             print('Already cached')
@@ -159,9 +159,20 @@ class Localization_dataset(Dataset):
         start_frame_audio = start_frame / 10
         audio_name = os.path.join(self.data_folder, label_name)
 
-        audio, sr = librosa.load(audio_name[:-4] + '.wav', sr=self.sr, mono=False, offset=start_frame_audio, duration=self.duration)
-        if audio.shape[-1] < self.duration * self.sr:
-            audio = np.pad(audio, ((0, 0), (0, int(self.duration * self.sr - audio.shape[-1]))))
+        source_audio = []
+        source_files = os.listdir(audio_name[:-4])
+        for i in range(len(source_files)):
+            source_file = source_files[i]
+            source, sr = librosa.load(os.path.join(audio_name[:-4], source_file), sr=self.sr, mono=False, 
+                                    offset=start_frame_audio, duration=self.duration)
+            if source.shape[-1] < self.duration * self.sr:
+                source = np.pad(source, ((0, 0), (0, self.duration * self.sr - source.shape[-1])))
+            else:
+                source = source[:, :int(self.duration * self.sr)]
+            source_audio.append(source)
+        source_audio = np.array(source_audio)
+        audio = np.sum(source_audio, axis=0).astype(np.float32)
+
         if hasattr(self, 'cache_folder'):
             spatial_feature = np.load(os.path.join(self.cache_folder, f'{index}.npy'))
         else:

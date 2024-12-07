@@ -19,7 +19,7 @@ for split in ['dev', 'eval']:
     dataset_dir = './separation/ESC50/' + split
     os.makedirs(dataset_dir, exist_ok=True)
     dataset = ESC50_dataset('./audio/ESC-50-master', split=split)
-    singleclass_dataset, classes_index = Singleclass_dataset(dataset)
+    singleclass_dataset, classes_index = Singleclass_dataset(dataset, keep_classes=[0, 5, 10, 16, 20, 25, 30, 37, 43, 46])
     num_repeat = 25
     for i in tqdm(range(len(singleclass_dataset))):
         output_dict = singleclass_dataset.__getitem__(i)

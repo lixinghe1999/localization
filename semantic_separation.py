@@ -35,8 +35,10 @@ class SeparationLightningModule(pl.LightningModule):
         data, label = batch
         if self.config['output_format'] == 'semantic':
             outputs = self.model(data)
+            noisy_loss = self.loss(data[0].squeeze(), label).mean()
             loss = self.loss(outputs.squeeze(), label).mean()
-        self.log('val_loss', loss, on_epoch=True, prog_bar=True, logger=True)      
+            self.log('noisy_val_loss', noisy_loss, on_epoch=True, prog_bar=True, logger=True)
+            self.log('val_loss', loss, on_epoch=True, prog_bar=True, logger=True)      
 
     def configure_optimizers(self):
         return optim.Adam(self.model.parameters(), lr=0.001)
@@ -47,13 +49,13 @@ if __name__ == '__main__':
     config = { 
                 "train_datafolder": "dataset/separation/ESC50/dev",
                 "test_datafolder": "dataset/separation/ESC50/eval",
-                "duration": 10,
+                "duration": 5,
                 "epochs": 50,
                 "batch_size": 8,
                 "output_format": "semantic",
                 "sample_rate": 16000,
                 "max_sources": 2,
-                "num_class": 10,
+                "num_class": 50,
             }
     train_dataset = LabelDataset(config['train_datafolder'], config,)
     test_dataset = LabelDataset(config['test_datafolder'], config,)
@@ -65,6 +67,11 @@ if __name__ == '__main__':
     model = SeparationLightningModule(config)
     trainer = Trainer(max_epochs=config['epochs'], devices=[0])
     trainer.fit(model, train_loader, test_loader)  
+
+    # ckpt = torch.load('lightning_logs/version_0/checkpoints/epoch=49-step=50000.ckpt')
+    # model.load_state_dict(ckpt['state_dict'])
     # trainer.validate(model, test_loader)
+
+
 
 

@@ -61,16 +61,17 @@ class simulator():
             self.HRTF = False
         elif device == 'earphone':
             mic_array = EARPHONE
-            self.init_HRTF('HRTF-Database/ITA HRTF-database/SOFA')
+            self.init_HRTF('HRTF-Database/ITA HRTF-database/SOFA', user=[0])
         self.fs = 16000 
         self.max_order = 10
         self.snr_lb, self.snr_ub = 20, 30
         self.offset = 0.5
+        self.min_diff = 45
         self.mic_array = mic_array
         self.room_dims = random_room()
         
-    def init_HRTF(self, HRTF_folder, user=range(1)):
-        self.azimuth_interval = 10
+    def init_HRTF(self, HRTF_folder, user=None):
+        self.azimuth_interval = 5
         self.HRTF_folder = HRTF_folder
         self.sofas = os.listdir(self.HRTF_folder)
         if user is not None:
@@ -103,12 +104,10 @@ class simulator():
         HRTF_signals = np.array(HRTF_signals)
         return HRTF_signals  
     
-    def simulate(self, data, room, mic_center, min_diff, max_range, out_folder):
+    def simulate(self, data, room, mic_center, max_range, out_folder):
         signals, class_names, active_masks = [], [], []
         doa_degree, ranges = [], []
         for (audio, class_name, active_mask) in data:
-            # if active_mask is None:
-            #     audio, active_mask = active_frame(audio, frame=0.1)
             signals.append(audio)
             class_names.append(class_name)
             active_masks.append(active_mask)
@@ -117,7 +116,7 @@ class simulator():
                 random_azimuth = uniform(0, 360)
                 for doa in doa_degree:
                     diff = np.abs(doa[0] - random_azimuth)
-                    if diff < min_diff:
+                    if diff < self.min_diff:
                         continue
                 break
             doa_degree.append([random_azimuth, 0])
@@ -146,7 +145,7 @@ class simulator():
         df = df.sort_values(by=['frame'])
         return df
     
-    def simulate_all(self, save_folder, dataset, num_data=None, max_source=1, min_diff=45):
+    def simulate_all(self, save_folder, dataset, num_data=None, max_source=1):
         smartglass_folder = save_folder + '/audio'
         os.makedirs(smartglass_folder, exist_ok=True)
         meta_folder = save_folder + '/meta'
@@ -165,12 +164,9 @@ class simulator():
             room.add_microphone_array(mic_center[:, np.newaxis] + self.mic_array)
 
             max_range = min(room_dim[0]-mic_center[0], mic_center[0], room_dim[1]-mic_center[1], mic_center[1])
-            # num_source = sample(range(1, max_source + 1), 1)[0]
-            num_source = max_source
-            sig_index = sample(range(len(dataset)), num_source)
+            sig_index = sample(range(len(dataset)), max_source)
             data = [dataset[i] for i in sig_index]
             
-            df = self.simulate(data, room, mic_center, min_diff, max_range, f"{smartglass_folder}/{i}")
+            df = self.simulate(data, room, mic_center, max_range, f"{smartglass_folder}/{i}")
             meta_file = f"{meta_folder}/{i}.csv"
             df.to_csv(meta_file, index=False)
-        

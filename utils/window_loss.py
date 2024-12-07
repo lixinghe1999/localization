@@ -32,30 +32,6 @@ def ACCDOA_loss(pred, labels, implicit=True, training=True):
         loss = sed_loss + doa_loss
     return loss
 
-# def Multi_ACCDOA_loss(pred, label):
-#     '''
-#     permutation-aware loss
-#     pred: (batch, time, source*3(xyz))
-#     label: (batch, time, source*4(sed+xyz))
-#     '''
-#     batch, time, N = label.shape
-#     num_source = N // 4
-#     pred = pred.reshape(batch, time, num_source, 3); label = label.reshape(batch, time, num_source, 4)
-#     # compute all possible permutations and use the one with the smallest loss
-#     perms = list(itertools.permutations(range(num_source)))
-#     batch_loss = 0
-#     for p, l in zip(pred, label):
-#         min_loss = float('inf')
-#         for perm in perms:
-#             pred_perm = p[:, perm, :] # [time, source, 3]
-#             label_perm = l[:, perm, :] # [time, source, 4]
-#             pred_perm = pred_perm.reshape(1, time, num_source*3)
-#             label_perm = label_perm.reshape(1, time, num_source*4)
-#             loss = ACCDOA_loss(pred_perm, label_perm)
-#             min_loss = min(min_loss, loss)
-#         batch_loss += min_loss
-#     return batch_loss/batch
-
 
 class MSELoss:
     def __init__(self, reduction='mean'):

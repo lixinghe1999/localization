@@ -59,7 +59,7 @@ class SeldNetLightningModule(pl.LightningModule):
 
         outputs = self(data)
         loss = self.criterion(outputs, labels)
-        self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        self.log('loss', loss, on_epoch=True, prog_bar=True, logger=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -69,28 +69,15 @@ class SeldNetLightningModule(pl.LightningModule):
         outputs = self(data)
         eval_dict = self.evaluation(outputs.cpu().numpy(), labels.cpu().numpy())
 
-        self.log('val_sed_F1', eval_dict['sed_F1'])
-        self.log('val_F1', eval_dict['F1'])
-        self.log('val_precision', eval_dict['precision'])
-        self.log('val_recall', eval_dict['recall'])
-        self.log('val_distance', eval_dict['distance'])
+        self.log('sed_F1', eval_dict['sed_F1'], on_epoch=True, prog_bar=True, logger=True)
+        self.log('F1', eval_dict['F1'], on_epoch=True, prog_bar=True, logger=True)
+        self.log('precision', eval_dict['precision'])
+        self.log('recall', eval_dict['recall'])
+        self.log('distance', eval_dict['distance'], on_epoch=True, prog_bar=True, logger=True)
         return eval_dict
 
     def configure_optimizers(self):
         return optim.Adam(self.model.parameters(), lr=0.0001)
-
-def run_MUSIC(dataset):
-    from utils.doa import inference, init
-    from simulate.parameter import MIC_ARRAY_SIMULATION
-    algo = init(MIC_ARRAY_SIMULATION, fs=16000, nfft=1600, algorithm='music')
-
-    for i in range(len(dataset)):
-        data = dataset[i]
-        audio, imu = data['audio'], data['imu']
-        predictions = inference(algo, [audio, None])
-        print(predictions.shape, data['label'].shape)
-        acc = ACCDOA_evaluation(predictions, data['label'])
-        print(acc)
 
 
 if __name__ == '__main__':
@@ -134,9 +121,8 @@ if __name__ == '__main__':
     # }
 
     config = {
-        "train_datafolder": "/home/lixing/localization/dataset/smartglass/AudioSet_2/train",
-        "test_datafolder": "/home/lixing/localization/dataset/smartglass/AudioSet_2/test",
-        "cache_folder": "cache/audioset_2/",
+        "train_datafolder": "/home/lixing/localization/dataset/earphone/AudioSet_2/train",
+        "test_datafolder": "/home/lixing/localization/dataset/earphone/AudioSet_2/test",
         "encoding": "ACCDOA",
         "duration": 5,
         "frame_duration": 0.1,
@@ -145,8 +131,8 @@ if __name__ == '__main__':
         "model": "seldnet",
         "label_type": "framewise",
         "raw_audio": False,
-        'num_channel': 15,
-        'output_dimension': 6, # no need to do classification now
+        'num_channel': 3,
+        'output_dimension': 3, # no need to do classification now
         "pretrained": False,
         "test": False,
         'class_names':["sound"],
@@ -155,31 +141,23 @@ if __name__ == '__main__':
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    # train_dataset = Localization_dataset(config['train_datafolder'], config)
+    train_dataset = Localization_dataset(config['train_datafolder'], config)
     test_dataset = Localization_dataset(config['test_datafolder'], config)
     
-    # recognition_model = AudioRecognition(train_dataset=train_dataset, test_dataset=test_dataset)
-    # trainer = pl.Trainer(max_epochs=10, devices=1)
-    # trainer.fit(recognition_model)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=4)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False, num_workers=4)
 
+    model = SeldNetLightningModule(config)
 
-    # train_dataset._cache_(config['cache_folder'] + '/train')
-    # test_dataset._cache_(config['cache_folder'] + '/test')
+    if config['pretrained']:
+        ckpt = torch.load(config['pretrained'])['state_dict']
+        model.load_state_dict(ckpt)
+        print('load pretrained model from', config['pretrained'])
 
-    # train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=4)
-    # test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False, num_workers=4)
+    trainer = Trainer(
+        max_epochs=config['epochs'], devices=1)
 
-    # model = SeldNetLightningModule(config)
-
-    # if config['pretrained']:
-    #     ckpt = torch.load(config['pretrained'])['state_dict']
-    #     model.load_state_dict(ckpt)
-    #     print('load pretrained model from', config['pretrained'])
-
-    # trainer = Trainer(
-    #     max_epochs=config['epochs'], devices=1)
-
-    # if config['test']:
-    #     trainer.validate(model, test_loader)
-    # else:
-    #     trainer.fit(model, train_loader, test_loader)
+    if config['test']:
+        trainer.validate(model, test_loader)
+    else:
+        trainer.fit(model, train_loader, test_loader)
