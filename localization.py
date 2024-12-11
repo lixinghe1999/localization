@@ -50,14 +50,11 @@ class SeldNetLightningModule(pl.LightningModule):
         self.criterion = ACCDOA_loss if config['encoding'] == 'ACCDOA' else Multi_ACCDOA_loss
         self.evaluation = ACCDOA_evaluation if config['encoding'] == 'ACCDOA' else Multi_ACCDOA_evaluation
 
-    def forward(self, x):
-        return self.model(x)
-
     def training_step(self, batch, batch_idx):
         data = batch['spatial_feature']
         labels = batch['label']
 
-        outputs = self(data)
+        outputs = self.model(data)
         loss = self.criterion(outputs, labels)
         self.log('loss', loss, on_epoch=True, prog_bar=True, logger=True)
         return loss
@@ -66,13 +63,11 @@ class SeldNetLightningModule(pl.LightningModule):
         data = batch['spatial_feature']
         labels = batch['label']
 
-        outputs = self(data)
+        outputs = self.model(data)
         eval_dict = self.evaluation(outputs.cpu().numpy(), labels.cpu().numpy())
 
         self.log('sed_F1', eval_dict['sed_F1'], on_epoch=True, prog_bar=True, logger=True)
         self.log('F1', eval_dict['F1'], on_epoch=True, prog_bar=True, logger=True)
-        self.log('precision', eval_dict['precision'])
-        self.log('recall', eval_dict['recall'])
         self.log('distance', eval_dict['distance'], on_epoch=True, prog_bar=True, logger=True)
         return eval_dict
 
@@ -83,23 +78,24 @@ class SeldNetLightningModule(pl.LightningModule):
 if __name__ == '__main__':
 
     config = {
-        "train_datafolder": "/home/lixing/localization/dataset/smartglass/NIGENS_2/train",
-        "test_datafolder": "/home/lixing/localization/dataset/smartglass/NIGENS_2/test",
+        "train_datafolder": "/home/lixing/localization/dataset/smartglass/NIGENS_1/train",
+        "test_datafolder": "/home/lixing/localization/dataset/smartglass/NIGENS_1/test",
         "encoding": "ACCDOA",
         "duration": 5,
         "frame_duration": 0.1,
         "batch_size": 16,
-        "epochs": 10,
+        "epochs": 100,
         "model": "seldnet",
         "label_type": "framewise",
         "raw_audio": False,
         'num_channel': 15,
-        'output_channel': 3, # no need to do classification now
+        'output_channel': 4, # no need to do classification now
+        # "pretrained": 'lightning_logs/localization/earphone_nigens_1/checkpoints/epoch=49-step=68950.ckpt',
         "pretrained": False,
         "test": False,
         'class_names':["sound"],
         'motion': False,
-        "sr": 16000,
+        "sr": 44100,
         'mixture': False,
     }
 

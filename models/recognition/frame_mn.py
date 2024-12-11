@@ -12,28 +12,29 @@ class Sound_Event_Detector(nn.Module):
         self.backbone = get_mobilenet_model(num_classes=num_classes, pretrained_name=model_name, width_mult=NAME_TO_WIDTH(model_name), 
                                          strides=[2, 2, 2, 2], head_type='mlp')
         if frame_duration is not None:
-            frame_length = int(50 * frame_duration)
-            self.backbone = Frame_MobileNet(self.backbone, frame_length)
-
+            frame_per_second = 50
+            frame_length = int(frame_per_second * frame_duration)
+            self.backbone = Frame_MobileNet(self.backbone, num_classes, frame_length)
+        
     def forward(self, x, return_fmaps=False):
-        if isinstance(x, list):
+        if not isinstance(x, torch.Tensor):
             x, vision = x
             x = self.preprocess(x)
-            x, feature = self.backbone(x.unsqueeze(1), vision, return_fmaps=return_fmaps)
+            x = self.backbone(x.unsqueeze(1), vision, return_fmaps=return_fmaps)
         else:
             x = self.preprocess(x)
-            x, feature = self.backbone(x.unsqueeze(1), return_fmaps=return_fmaps)
+            x = self.backbone(x.unsqueeze(1), return_fmaps=return_fmaps)
         
-        return x, feature
+        return x
 
 class Frame_MobileNet(torch.nn.Module):
-    def __init__(self, backbone, frame_length: int = 50):
+    def __init__(self, backbone, num_classes, frame_length: int = 50):
         super().__init__()
         # copy all the layers of backbone
         self.features = backbone.features
         self.classifier = backbone.classifier
         self.frame_length = frame_length
-        self.condition_classifier = torch.nn.Linear(416 + 512, 416)
+        self.condition_classifier = torch.nn.Linear(num_classes + 512, num_classes)
 
     def _forward(self, x, vision=None, return_fmaps: bool = False):
         '''
@@ -64,16 +65,15 @@ class Frame_MobileNet(torch.nn.Module):
         if return_fmaps:
             return x, fmaps
         else:
-            return x, features
+            return x
     
     def forward(self, x, vision=None, return_fmaps: bool = False, ):
         B, C, Freq, T = x.shape
         _T = T//self.frame_length
         x = x.view(B*_T, 1, Freq, self.frame_length)
-        x, features = self._forward(x, vision, return_fmaps=return_fmaps)
+        x = self._forward(x, vision, return_fmaps=return_fmaps)
         x = x.view(B, _T, -1)
-        features = features.view(B, _T, -1)
-        return x, features
+        return x
     
 
 class Frame_Conformer(torch.nn.Module):

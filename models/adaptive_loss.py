@@ -71,7 +71,7 @@ class SNRLosses(nn.Module):
             return self.loss_fn(est_target=est, target=gt)
 
 class SNRLPLoss(nn.Module):
-    def __init__(self, snr_loss_name = "snr", neg_weight = 50) -> None:
+    def __init__(self, snr_loss_name = "snr", neg_weight = 100) -> None:
         super().__init__()
         self.snr_loss = SNRLosses(snr_loss_name)
         # self.lp_loss = LogPowerLoss()

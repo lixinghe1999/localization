@@ -8,8 +8,8 @@ import clip
 import numpy as np
 import cv2
 
-dataset_folder = '../dataset/audioset'
-split = 'eval'
+dataset_folder = 'audio/audioset'
+split = 'train'
 tsv = f'{dataset_folder}/audioset_{split}_strong.tsv'
 video_folder = f'{dataset_folder}/audioset_{split}_strong'
 text_folder = f'{dataset_folder}/audioset_{split}_strong_text'
@@ -24,6 +24,7 @@ os.makedirs(audio_folder, exist_ok=True)
 
 existing_files = os.listdir(video_folder)
 df = pd.read_csv(tsv, sep='\t')
+
 def download_segment(args):
     segment_id, video_folder, existing_files = args
     ytid, starttime = segment_id.rsplit('_', 1)
@@ -52,7 +53,7 @@ def download_segment(args):
     os.system(f'yt-dlp --skip-download {youtube_url} -o "{text_folder}/{segment_id}.json" --write-info-json')
 
 
-MODE = 'audio_embedding' # 'download' or 'process'
+MODE = 'image_embedding' # 'download' or 'process'
 
 if MODE == 'download':
     from multiprocessing import Pool, Manager
@@ -60,8 +61,6 @@ if MODE == 'download':
     unique_segment_id = df['segment_id'].unique()
     args = [(segment_id, video_folder, existing_files) for segment_id in unique_segment_id]
     # remove the repea
-    # print(args)
-    # Use a Manager to share existing_files between processes
     with Manager() as manager:
         with Pool(processes=8) as pool:
             pool.map(download_segment, args)
@@ -111,7 +110,7 @@ elif MODE == 'image_embedding':
 
     existing_files = [file for file in existing_files if file.endswith('.jpg')]
     # existing_files = [file for file in existing_files if file.endswith('.mp4')]
-    for existing_file in existing_files:
+    for existing_file in tqdm(existing_files):
         plain_fname = existing_file.split('.')[0]
         image_fname = f'{image_folder}/{existing_file}'
         if image_fname.endswith('.jpg'):

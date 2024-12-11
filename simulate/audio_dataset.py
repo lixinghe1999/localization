@@ -61,10 +61,11 @@ class AudioSet_dataset_wrapper(Dataset):
         return audio, 0, active_frame
 
 class NIGENS_dataset(Dataset):
-    def __init__(self, root='NIGENS', split='train', sr=16000):
+    def __init__(self, root='NIGENS', split='train', sr=16000, duration=10):
         self.root_dir = root
         self.data = []
         self.sr = sr
+        self.duration = duration
         self.class_names = ['alarm', 'baby', 'crash', 'dog', 'engine', 'femaleScream', 'femaleSpeech', 'fire', 'footsteps',
                             'knock', 'maleScream', 'maleSpeech', 'phone', 'piano',]
         for sound_class in (self.class_names):
@@ -86,9 +87,8 @@ class NIGENS_dataset(Dataset):
         return len(self.data)
     def __getitem__(self, idx):
         audio, txt, class_name = self.data[idx]
-        audio = librosa.load(audio, sr=self.sr)[0]
+        audio, sr = librosa.load(audio, sr=self.sr)
         active_frame = np.zeros(int(len(audio) / self.sr / 0.1))
-
         with open(txt, 'r') as f:
             lines = f.readlines()
         for line in lines:
@@ -97,6 +97,15 @@ class NIGENS_dataset(Dataset):
             end_frame = int(float(end) / 0.1)
             active_frame[start_frame:end_frame] = 1
         class_idx = self.class_names.index(class_name)
+
+        if len(audio) > self.sr * self.duration:
+            random_offset = np.random.randint(0, len(audio) - self.sr * self.duration)
+            audio = audio[random_offset:random_offset + self.sr * self.duration]
+            active_frame = active_frame[random_offset // int(self.sr * 0.1): (random_offset + self.sr * self.duration) // int(self.sr * 0.1)]
+        else:
+            audio = np.pad(audio, (0, self.sr * self.duration - len(audio)))
+            active_frame = np.pad(active_frame, (0, self.sr * self.duration - len(active_frame)))
+            
         return audio, class_idx, active_frame
     
 class TIMIT_dataset(Dataset):
@@ -142,31 +151,31 @@ class VCTK_dataset(Dataset):
         active_frames = np.ones(int(len(audio) / self.sr / 0.1))
         return audio, 0, active_frames
 
-def dataset_parser(dataset, relative_path):
+def dataset_parser(dataset, relative_path, sr=16000):
     if dataset == 'TIMIT':
         root = os.path.join(relative_path, 'TIMIT')
-        train_dataset = TIMIT_dataset(root=root, split='TRAIN')
-        test_dataset = TIMIT_dataset(root=root, split='TEST')
+        train_dataset = TIMIT_dataset(root=root, split='TRAIN', sr=sr)
+        test_dataset = TIMIT_dataset(root=root, split='TEST', sr=sr)
     elif dataset == 'VCTK':
         root = os.path.join(relative_path, 'VCTK')
-        train_dataset = VCTK_dataset(root=root, split='train')
-        test_dataset = VCTK_dataset(root=root, split='test')
+        train_dataset = VCTK_dataset(root=root, split='train', sr=sr)
+        test_dataset = VCTK_dataset(root=root, split='test', sr=sr)
     elif dataset == 'NIGENS':
         root = os.path.join(relative_path, 'NIGENS')
-        train_dataset = NIGENS_dataset(root=root, split='train')
-        test_dataset = NIGENS_dataset(root=root, split='test')
+        train_dataset = NIGENS_dataset(root=root, split='train', sr=sr)
+        test_dataset = NIGENS_dataset(root=root, split='test', sr=sr)
     elif dataset == 'AudioSet':
         root = os.path.join(relative_path, 'audioset')
-        train_dataset = AudioSet_dataset_wrapper(root=root, split='train')
-        test_dataset = AudioSet_dataset_wrapper(root=root, split='eval')
+        train_dataset = AudioSet_dataset_wrapper(root=root, split='train', sr=sr)
+        test_dataset = AudioSet_dataset_wrapper(root=root, split='eval', sr=sr)
     elif dataset == 'FUSS':
         root = os.path.join(relative_path, 'FUSS')
-        train_dataset = FUSS_dataset_wrapper(root=root, split='train')
-        test_dataset = FUSS_dataset_wrapper(root=root, split='eval')
+        train_dataset = FUSS_dataset_wrapper(root=root, split='train', sr=sr)
+        test_dataset = FUSS_dataset_wrapper(root=root, split='eval', sr=sr)
     elif dataset == 'FSD50K':
         root = os.path.join(relative_path, 'FSD50K')
-        train_dataset = FSD50K_dataset_wrapper(root=root, split='train')
-        test_dataset = FSD50K_dataset_wrapper(root=root, split='test')
+        train_dataset = FSD50K_dataset_wrapper(root=root, split='train', sr=sr)
+        test_dataset = FSD50K_dataset_wrapper(root=root, split='test', sr=sr)
     return train_dataset, test_dataset
 
 if __name__ == '__main__':

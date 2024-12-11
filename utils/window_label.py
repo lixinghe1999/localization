@@ -40,7 +40,7 @@ def Region_label(labels, config):
     return label_window
 
 
-def ACCDOA_label(labels, config, sed=False):
+def ACCDOA_label(labels, config):
     '''
     label: [(frame, class_idx, source_idx, location), ...]
     config

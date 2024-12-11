@@ -43,8 +43,8 @@ class BeamformingLightningModule(pl.LightningModule):
         outputs = self(data)
 
         positive_loss, negative_loss = self.loss(outputs, label)
-        self.log('validataion/positive_loss', positive_loss, on_epoch=True, prog_bar=True, logger=True)
-        self.log('validataion/negative_loss', negative_loss, on_epoch=True, prog_bar=True, logger=True)
+        self.log('validataion/positive', positive_loss, on_epoch=True, prog_bar=True, logger=True)
+        self.log('validataion/negative', negative_loss, on_epoch=True, prog_bar=True, logger=True)
 
     def configure_optimizers(self):
         return optim.Adam(self.model.parameters(), lr=0.001)
@@ -80,8 +80,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     config = { 
-                "train_datafolder": "dataset/smartglass/VCTK_2/train",
-                "test_datafolder": "dataset/smartglass/VCTK_2/test",
+                "train_datafolder": "dataset/smartglass/NIGENS_2/train",
+                "test_datafolder": "dataset/smartglass/NIGENS_2/test",
                 "ckpt": "",
                 "duration": 5,
                 "epochs": 20,
@@ -92,17 +92,18 @@ if __name__ == '__main__':
                 "num_region": 8,
             }
     train_dataset = Beamforming_dataset(config['train_datafolder'], config,)
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=4)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=8)
 
     test_dataset = Beamforming_dataset(config['test_datafolder'], config,)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=4)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False, num_workers=4)
     
     model = BeamformingLightningModule(config)
 
-    # trainer = Trainer(max_epochs=config['epochs'], devices=[1])
-    # trainer.fit(model, train_loader, test_loader)  
+    trainer = Trainer(max_epochs=config['epochs'], devices=[1])
+    
+    trainer.fit(model, train_loader, test_loader)  
 
-    ckpt_path = 'lightning_logs/vctk_8/checkpoints/epoch=19-step=50000.ckpt'
-    model.load_state_dict(torch.load(ckpt_path, weights_only=True)['state_dict'])    
-    model.visualize(test_loader)
+    # ckpt_path = 'lightning_logs/beamforming/vctk_12/checkpoints/epoch=19-step=50000.ckpt'
+    # model.load_state_dict(torch.load(ckpt_path, weights_only=True)['state_dict'])    
+    # model.visualize(test_loader)
 

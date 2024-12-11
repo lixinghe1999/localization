@@ -9,26 +9,23 @@ def Region_loss(pred, labels):
     loss = torch.nn.functional.binary_cross_entropy(pred, labels)
     return loss
 
-def ACCDOA_loss(pred, labels, implicit=True, training=True):
-    if implicit:
+def ACCDOA_loss(pred, labels):
+    num_class = labels.shape[-1] // 4; labels = labels.reshape(-1, num_class, 4)
+    if pred.shape[-1] == (3 * num_class):
         '''
         pred: (batch, time, nb_class * 3)
-        labels: (batch, time, nb_class * 4)
         '''
-        num_class = labels.shape[-1] // 4
-        pred = pred.reshape(-1, num_class, 3); labels = labels.reshape(-1, num_class, 4)
+        pred = pred.reshape(-1, num_class, 3)
         loss = torch.nn.functional.mse_loss(pred, labels[..., 1:])
     else:
         '''
-        pred: (batch, time, nb_class * 4) [class_active, x, y, z]
-        labels: (batch, time, nb_class * 4)
+        pred: (batch, time, nb_class * 4)
         '''
-        num_class = labels.shape[-1] // 4
-        pred = pred.reshape(-1, num_class, 4); labels = labels.reshape(-1, num_class, 4)
+        pred = pred.reshape(-1, num_class, 4)
         pred_sed = pred[..., 0]; label_sed = labels[..., 0]
         # classification loss for sed
         sed_loss = torch.nn.BCEWithLogitsLoss()(pred_sed, label_sed.float())
-        doa_loss = torch.nn.functional.mse_loss(pred[..., 1:], labels[..., 1:])
+        doa_loss = torch.nn.functional.mse_loss(pred[..., 1:], labels[..., 1:]) * 10
         loss = sed_loss + doa_loss
     return loss
 

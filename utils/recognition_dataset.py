@@ -59,20 +59,16 @@ class AudioSet_dataset(Dataset):
         label_file = os.path.join(root, 'audioset_{}_strong.tsv'.format(split))
 
         label = pd.read_csv(label_file, sep='\t')
-        labels = {}
-        self.label_map = {}
+        labels = {}; self.vocabulary = {}
         for row in label.itertuples():
-            start_seconds = row.start_time_seconds
-            end_seconds = row.end_time_seconds
-            label = row.label
-            segment_id = row.segment_id 
-            if row.label not in self.label_map:
-                self.label_map[row.label] = len(self.label_map)
+            start_seconds = row.start_time_seconds; end_seconds = row.end_time_seconds
+            label = row.label; segment_id = row.segment_id 
+            if label not in self.vocabulary:
+                self.vocabulary[label] = len(self.vocabulary)
             if segment_id not in labels:
                 labels[segment_id] = []
-            
             labels[segment_id].append([start_seconds, end_seconds, label])
-        self.num_classes = len(self.label_map)
+        self.num_classes = len(self.vocabulary)
         print('Number of classes:', self.num_classes)
 
         self.sr = sr
@@ -87,10 +83,10 @@ class AudioSet_dataset(Dataset):
             clip_label = np.zeros(self.num_classes, dtype=np.float32)
             frame_label = np.zeros((self.num_frames_per_clip, self.num_classes), dtype=np.float32)
             for start, end, label in labels[segment_id]:
-                clip_label[self.label_map[label]] = 1
+                clip_label[self.vocabulary[label]] = 1
                 start_frame = int(start/ self.frame_duration)
                 end_frame = int(end/ self.frame_duration)
-                frame_label[start_frame:end_frame, self.label_map[label]] = 1
+                frame_label[start_frame:end_frame, self.vocabulary[label]] = 1
             self.frame_labels.append([segment_id, frame_label])
             self.clip_labels.append([segment_id, clip_label])
     
