@@ -33,7 +33,7 @@ class simulator():
         elif device == 'earphone':
             self.mic_array = EARPHONE
             self.HRTF = True
-            self.Reverb = False
+            self.Reverb = True
             self.num_channel = 2
             self.hrtf_simulator = HRTF_simulator()
 

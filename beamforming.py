@@ -5,7 +5,6 @@ import pytorch_lightning as pl
 # We train the same model architecture that we used for inference above.
 
 from models.beamforming import BeamformerModel, ConvTas_Net, Net
-from asteroid.models import FasNetTAC
 from models.adaptive_loss import SNRLPLoss
 
 from asteroid.losses import pairwise_neg_sisdr, singlesrc_neg_sisdr, multisrc_neg_sdsdr, PITLossWrapper
@@ -21,9 +20,7 @@ class BeamformingLightningModule(pl.LightningModule):
     def __init__(self, config):
         super(BeamformingLightningModule, self).__init__()
         self.config = config
-        # self.model = BeamformerModel(ch_in=5, synth_mid=64, synth_hid=96, block_size=16, kernel=3, synth_layer=4, synth_rep=4, lookahead=0)
-        # self.model = FasNetTAC(n_src=config['max_sources'], sample_rate=config['sample_rate'])
-        self.model = Net(num_src=config['num_region'])
+        self.model = Net(num_ch=config['num_channel'], num_src=config['num_region'])
 
         self.loss = SNRLPLoss()
 
@@ -34,15 +31,17 @@ class BeamformingLightningModule(pl.LightningModule):
         data, label = batch
         outputs = self(data)
 
-        loss = self.loss(outputs, label)
+        if self.current_epoch < 15:
+            loss = self.loss(outputs, label, neg_weight=0)
+        else:
+            loss = self.loss(outputs, label, neg_weight=20)
         self.log('train_loss', loss, on_step=True, prog_bar=True, logger=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         data, label = batch
         outputs = self(data)
-
-        positive_loss, negative_loss = self.loss(outputs, label)
+        positive_loss, negative_loss = self.loss(outputs, label, neg_weight=1)
         self.log('validataion/positive', positive_loss, on_epoch=True, prog_bar=True, logger=True)
         self.log('validataion/negative', negative_loss, on_epoch=True, prog_bar=True, logger=True)
 
@@ -57,10 +56,9 @@ class BeamformingLightningModule(pl.LightningModule):
         batch = next(iter(test_dataloader))
         data, label = batch
         outputs = self(data)
-        loss = self.loss(outputs, label)
+        loss = self.loss(outputs, label, neg_weight=1)
         print('loss:', loss)
         B, C, T = label.shape
-        print('label shape:', label.shape, 'outputs shape:', outputs.shape)
         for b in range(B):
             label_sample = label[b]; outputs_sample = outputs[b] # (N_channel, T), (1, T), (1, T)             
             max_value = max(label_sample.max(), outputs_sample.max()).item()
@@ -80,16 +78,17 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     config = { 
-                "train_datafolder": "dataset/smartglass/NIGENS_2/train",
-                "test_datafolder": "dataset/smartglass/NIGENS_2/test",
+                "train_datafolder": "dataset/earphone/VCTK_2/train",
+                "test_datafolder": "dataset/earphone/VCTK_2/test",
                 "ckpt": "",
                 "duration": 5,
                 "epochs": 20,
                 "batch_size": 4,
                 "output_format": "region",
-                "sample_rate": 16000,
+                "sample_rate": 44100,
                 "max_sources": 2,
-                "num_region": 8,
+                "num_channel": 2, 
+                "num_region": 4,
             }
     train_dataset = Beamforming_dataset(config['train_datafolder'], config,)
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=8)
@@ -99,11 +98,19 @@ if __name__ == '__main__':
     
     model = BeamformingLightningModule(config)
 
-    trainer = Trainer(max_epochs=config['epochs'], devices=[1])
+    trainer = Trainer(max_epochs=config['epochs'], devices=[0])
     
-    trainer.fit(model, train_loader, test_loader)  
 
     # ckpt_path = 'lightning_logs/beamforming/vctk_12/checkpoints/epoch=19-step=50000.ckpt'
-    # model.load_state_dict(torch.load(ckpt_path, weights_only=True)['state_dict'])    
-    # model.visualize(test_loader)
+    # ckpt_path = 'lightning_logs/beamforming/vctk_8/checkpoints/epoch=19-step=50000.ckpt'
+
+    # ckpt_path = 'lightning_logs/version_0/checkpoints/epoch=19-step=25000.ckpt'
+    # ckpt_path = 'lightning_logs/version_1/checkpoints/epoch=4-step=6250.ckpt'
+    # ckpt_path = 'lightning_logs/beamforming/nigens_12/checkpoints/epoch=4-step=6250.ckpt'
+    ckpt_path = 'lightning_logs/version_2/checkpoints/epoch=19-step=28240.ckpt'
+    model.load_state_dict(torch.load(ckpt_path, weights_only=True)['state_dict'])    
+
+    # trainer.fit(model, train_loader, test_loader)  
+    model.visualize(test_loader)
+    # trainer.validate(model, test_loader)
 

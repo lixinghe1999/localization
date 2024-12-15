@@ -20,7 +20,7 @@ class SeparationLightningModule(pl.LightningModule):
         super(SeparationLightningModule, self).__init__()
         self.config = config
         if self.config['output_format'] == 'separation':
-            self.model = ConvTasNet(n_src=2, n_blocks=4, sample_rate=config['sample_rate'])
+            self.model = ConvTasNet(n_src=2, sample_rate=config['sample_rate'])
             # self.model = SuDORMRFNet(n_src=2, num_blocks=8, sample_rate=config['sample_rate'])
             self.loss = PITLossWrapper(pairwise_neg_sisdr, pit_from="pw_mtx")
 
@@ -52,13 +52,13 @@ if __name__ == '__main__':
                 "epochs": 20,
                 "batch_size": 4,
                 "output_format": "separation",
-                "sample_rate": 16000,
+                "sample_rate": 8000,
                 "max_sources": 2,
             }
     train_dataset = FUSSDataset(config['train_datafolder'], n_src=config['max_sources'], 
-                                duration=config['duration'], sample_rate=16000)
+                                duration=config['duration'], sample_rate=config['sample_rate'])
     test_dataset = FUSSDataset(config['train_datafolder'], n_src=config['max_sources'], 
-                               duration=config['duration'], sample_rate=16000)
+                               duration=config['duration'], sample_rate=config['sample_rate'])
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=4)
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False, num_workers=4)

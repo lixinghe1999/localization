@@ -6,12 +6,12 @@ import numpy as np
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', type=str, default='NIGENS', choices=['TIMIT', 'VCTK', 'NIGENS', 'AudioSet', 'FUSS', 'FSD50K'])
+    parser.add_argument('--dataset', type=str, default='VCTK', choices=['TIMIT', 'VCTK', 'NIGENS', 'AudioSet', 'FUSS', 'FSD50K'])
     parser.add_argument('--save_folder', type=str, required=False, default='../dataset')
-    parser.add_argument('--device', type=str, default='smartglass', choices=['earphone', 'smartglass'])
-    parser.add_argument('--max_source', type=int, default=1)
+    parser.add_argument('--device', type=str, default='earphone', choices=['earphone', 'smartglass'])
+    parser.add_argument('--max_source', type=int, default=2)
     parser.add_argument('--num_data', type=int, default=5000)
-    parser.add_argument('--sr', type=int, default=16000)
+    parser.add_argument('--sr', type=int, default=44100)
 
     args = parser.parse_args()
     train_dataset, test_dataset = dataset_parser(args.dataset, '../dataset/audio', args.sr)  

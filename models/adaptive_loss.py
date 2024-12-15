@@ -71,14 +71,13 @@ class SNRLosses(nn.Module):
             return self.loss_fn(est_target=est, target=gt)
 
 class SNRLPLoss(nn.Module):
-    def __init__(self, snr_loss_name = "snr", neg_weight = 100) -> None:
+    def __init__(self, snr_loss_name = "snr") -> None:
         super().__init__()
         self.snr_loss = SNRLosses(snr_loss_name)
         # self.lp_loss = LogPowerLoss()
         # self.lp_loss = nn.L1Loss()#LogPowerLoss()
-        self.neg_weight = neg_weight
     
-    def forward(self, est: torch.Tensor, gt: torch.Tensor, **kwargs):
+    def forward(self, est: torch.Tensor, gt: torch.Tensor, neg_weight=0):
         """
         input: (B, C, T) (B, C, T)
         """
@@ -90,7 +89,7 @@ class SNRLPLoss(nn.Module):
         if any(sample_mask):
             neg_loss = torch.abs(est - gt).mean(dim=2).reshape(-1)
             # neg_loss = 10 * torch.log10(torch.sum(est ** 2, axis=-1) + 1e-3).reshape(-1)
-            comp_loss[sample_mask] = neg_loss[sample_mask] * self.neg_weight
+            comp_loss[sample_mask] = neg_loss[sample_mask] * neg_weight
             
         # If there's at least one positive sample
         if any((~ sample_mask)):

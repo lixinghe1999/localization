@@ -142,9 +142,9 @@ class Beamforming_dataset(Dataset):
         self.crop_labels = []
         for i, label_name in enumerate(tqdm(self.labels)):
             label = np.loadtxt(os.path.join(self.label_folder, label_name), delimiter=',', dtype=np.int32, skiprows=1)
-            if len(label.shape) == 0:
-                continue
             if len(label.shape) == 1:
+                continue
+            if label.shape[0] == 1:
                 label = label[np.newaxis, :]
             audio_file = os.path.join(self.data_folder, label_name[:-4] + '/0.wav')
             max_frame = int(librosa.get_duration(path=audio_file) * 10)
@@ -153,6 +153,7 @@ class Beamforming_dataset(Dataset):
                 end_frame = min(start_frame + frame_duration, max_frame)
                 mini_chunk = []
                 for l in label:
+                    # print(l, start_frame, end_frame)
                     if l[0] >= start_frame and l[0] < end_frame:
                         mini_chunk.append(l)
                 mini_chunk = np.array(mini_chunk)
@@ -160,7 +161,7 @@ class Beamforming_dataset(Dataset):
                     self.crop_labels.append((label_name, start_frame, end_frame, mini_chunk))
         print('Total crop labels:', len(self.crop_labels))
     def __len__(self):
-        return len(self.labels)
+        return len(self.crop_labels)
     def __getitem__(self, index): 
 
         label_name, start_frame, end_frame, label = self.crop_labels[index]
