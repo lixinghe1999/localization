@@ -4,9 +4,10 @@ from pytorch_lightning import Trainer
 import pytorch_lightning as pl
 # We train the same model architecture that we used for inference above.
 
-from models.beamforming import BeamformerModel, ConvTas_Net, Net
-from models.adaptive_loss import SNRLPLoss
+from models.separation.multichannel_sep import MultiChannel_Sep
+from asteroid.models import DPRNNTasNet, ConvTasNet, SuDORMRFNet
 
+from asteroid.losses import singlesrc_neg_sisdr
 
 from utils.beamforming_dataset import Beamforming_dataset
 import torch.nn as nn
@@ -18,30 +19,34 @@ class BeamformingLightningModule(pl.LightningModule):
     def __init__(self, config):
         super(BeamformingLightningModule, self).__init__()
         self.config = config
-        self.model = Net(num_ch=config['num_channel'], num_src=config['num_region'])
+        separator = ConvTasNet(n_src=2, sample_rate=8000)
+        ckpt_path = 'lightning_logs/separation/convasnet_8k/checkpoints/epoch=19-step=49960.ckpt'
+        ckpt = torch.load(ckpt_path, weights_only=True)
+        ckpt = {k.replace('model.', ''): v for k, v in ckpt['state_dict'].items()}
+        separator.load_state_dict(ckpt)
+        print('Loaded separator from:', ckpt_path)
 
-        self.loss = SNRLPLoss()
+        self.model = MultiChannel_Sep(separator, n_channel=2, n_src=2, sample_rate=config['sample_rate'], sample_rate_separator=8000)
+
+        self.loss = singlesrc_neg_sisdr
 
     def forward(self, x):
         return self.model(x)
 
     def training_step(self, batch, batch_idx):
         data, label = batch
-        outputs = self(data)
+        outputs = self.model(data)
 
-        if self.current_epoch < 15:
-            loss = self.loss(outputs, label, neg_weight=0)
-        else:
-            loss = self.loss(outputs, label, neg_weight=20)
+        loss = self.loss(outputs, label)
         self.log('train_loss', loss, on_step=True, prog_bar=True, logger=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         data, label = batch
-        outputs = self(data)
-        positive_loss, negative_loss = self.loss(outputs, label, neg_weight=1)
-        self.log('validataion/positive', positive_loss, on_epoch=True, prog_bar=True, logger=True)
-        self.log('validataion/negative', negative_loss, on_epoch=True, prog_bar=True, logger=True)
+        print(data.shape, label.shape)
+        outputs = self.model(data)
+        loss = self.loss(outputs, label)
+        self.log('validataion', loss, on_epoch=True, prog_bar=True, logger=True)
 
     def configure_optimizers(self):
         return optim.Adam(self.model.parameters(), lr=0.001)
@@ -82,7 +87,7 @@ if __name__ == '__main__':
                 "duration": 5,
                 "epochs": 20,
                 "batch_size": 4,
-                "output_format": "region",
+                "output_format": "multichannel_separation",
                 "sample_rate": 44100,
                 "max_sources": 2,
                 "num_channel": 2, 
@@ -98,17 +103,7 @@ if __name__ == '__main__':
 
     trainer = Trainer(max_epochs=config['epochs'], devices=[0])
     
-
-    # ckpt_path = 'lightning_logs/beamforming/vctk_12/checkpoints/epoch=19-step=50000.ckpt'
-    # ckpt_path = 'lightning_logs/beamforming/vctk_8/checkpoints/epoch=19-step=50000.ckpt'
-
-    # ckpt_path = 'lightning_logs/version_0/checkpoints/epoch=19-step=25000.ckpt'
-    # ckpt_path = 'lightning_logs/version_1/checkpoints/epoch=4-step=6250.ckpt'
-    # ckpt_path = 'lightning_logs/beamforming/nigens_12/checkpoints/epoch=4-step=6250.ckpt'
-    ckpt_path = 'lightning_logs/version_2/checkpoints/epoch=19-step=28240.ckpt'
-    model.load_state_dict(torch.load(ckpt_path, weights_only=True)['state_dict'])    
-
     # trainer.fit(model, train_loader, test_loader)  
-    model.visualize(test_loader)
-    # trainer.validate(model, test_loader)
+    # model.visualize(test_loader)
+    trainer.validate(model, test_loader)
 

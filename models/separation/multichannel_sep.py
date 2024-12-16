@@ -4,29 +4,31 @@ import torch
 import torch.nn as nn
 
 class MultiChannel_Sep(nn.Module):
-    def __init__(self, separator, n_channel, n_src, sample_rate=8000):
+    def __init__(self, separator, n_channel, n_src, sample_rate=8000, sample_rate_separator=8000):
         super(MultiChannel_Sep, self).__init__()
-        if separator == 'DPRNNTasNet':
-            self.separator = DPRNNTasNet(n_src=n_src)
-        elif separator == 'ConvTasNet':
-            self.separator = ConvTasNet(n_src=n_src)
-        elif separator == 'SuDORMRFNet':
-            self.separator = SuDORMRFNet(n_src=n_src)
-        else:
-            raise ValueError(f"Unknown separator: {separator}")
+        self.separator = separator
         self.n_channel = n_channel
         self.n_src = n_src
         self.sample_rate = sample_rate
+        self.sample_rate_separator = sample_rate_separator
         self.refine_net = Net(num_ch=1 + n_src, num_src=1 * n_src, D=16, B=4)
 
     def _slow_forward(self, x):
         B, C, T = x.shape
+        print(x.shape)
         _xs = []
         for c in range(C):
             ref_channel = x[:, c:c+1]
+            # downsample to sample_rate_separator
+            ref_channel = nn.functional.interpolate(ref_channel, scale_factor=self.sample_rate_separator/self.sample_rate, mode='linear')
             separated = self.separator(ref_channel)
+            print(separated.shape)
+            # upsample to sample_rate
+            separated = nn.functional.interpolate(separated, size=T, mode='linear')
+            print(separated.shape)
             _xs.append(separated.unsqueeze(2))
         _x = torch.cat(_xs, dim=2)
+        print(_x.shape)
         return _x
     def forward(self, x, separated=None):
         return self._slow_forward(x)

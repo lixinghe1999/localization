@@ -20,8 +20,8 @@ class SeparationLightningModule(pl.LightningModule):
         super(SeparationLightningModule, self).__init__()
         self.config = config
         if self.config['output_format'] == 'separation':
-            self.model = ConvTasNet(n_src=2, sample_rate=config['sample_rate'])
-            # self.model = SuDORMRFNet(n_src=2, num_blocks=8, sample_rate=config['sample_rate'])
+            # self.model = ConvTasNet(n_src=2, sample_rate=config['sample_rate'])
+            self.model = SuDORMRFNet(n_src=2, sample_rate=config['sample_rate'])
             self.loss = PITLossWrapper(pairwise_neg_sisdr, pit_from="pw_mtx")
 
     def training_step(self, batch, batch_idx):
@@ -29,7 +29,7 @@ class SeparationLightningModule(pl.LightningModule):
         if self.config['output_format'] == 'separation':
             outputs = self.model(data)
             loss = self.loss(outputs, label)
-            self.log('train_loss', loss, on_step=True, prog_bar=True, logger=True)
+            self.log('train', loss, on_step=True, prog_bar=True, logger=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -37,7 +37,7 @@ class SeparationLightningModule(pl.LightningModule):
         if self.config['output_format'] == 'separation':
             outputs = self.model(data)
             loss = self.loss(outputs, label)
-        self.log('validation_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)      
+        self.log('val', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)      
 
     def configure_optimizers(self):
         return optim.Adam(self.model.parameters(), lr=0.001)
@@ -64,7 +64,7 @@ if __name__ == '__main__':
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False, num_workers=4)
 
     model = SeparationLightningModule(config)
-    trainer = Trainer(max_epochs=config['epochs'], devices=[0])
+    trainer = Trainer(max_epochs=config['epochs'], devices=[1])
     trainer.fit(model, train_loader, test_loader)  
 
     # trainer.validate(model, test_loader)
